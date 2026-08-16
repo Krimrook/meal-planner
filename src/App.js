@@ -1,23 +1,36 @@
-import logo from './logo.svg';
+import { useAuth } from './hooks/useAuth';
+import Signup from './components/Signup';
+import { supabase } from './lib/supabase';
 import './App.css';
 
 function App() {
+  const { user, loading } = useAuth();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (loading) {
+    return <div className="App">Loading...</div>;
+  }
+
+  if (user) {
+    return (
+      <div className="App">
+        <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
+          <h2>Welcome!</h2>
+          <p>You're logged in as: {user.email}</p>
+          <button onClick={handleLogout} style={{ padding: '10px 20px', cursor: 'pointer' }}>
+            Log Out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Scott's Meal Planner - LIVE ON THE INTERNET! 🚀
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+      <Signup />
     </div>
   );
 }
