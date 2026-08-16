@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth';
 import Signup from './components/Signup';
 import Login from './components/Login';
 import Onboarding from './components/Onboarding';
+import Settings from './components/Settings';
 import { supabase } from './lib/supabase';
 import './App.css';
 
@@ -11,6 +12,16 @@ function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const fetchProfile = () => {
+    return supabase
+      .from('user_profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle()
+      .then(({ data }) => setProfile(data));
+  };
 
   useEffect(() => {
     if (!user) {
@@ -18,30 +29,23 @@ function App() {
       return;
     }
 
-    supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setProfile(data);
-        setProfileLoading(false);
-      });
+    fetchProfile().then(() => setProfileLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setShowSettings(false);
   };
 
   const handleOnboardingComplete = () => {
-    // Re-fetch profile after onboarding saves
-    supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => setProfile(data));
+    fetchProfile();
+  };
+
+  const handleSettingsSave = () => {
+    fetchProfile();
+    setShowSettings(false);
   };
 
   if (loading || profileLoading) {
@@ -57,6 +61,19 @@ function App() {
       );
     }
 
+    if (showSettings) {
+      return (
+        <div className="App">
+          <Settings
+            userId={user.id}
+            profile={profile}
+            onSave={handleSettingsSave}
+            onBack={() => setShowSettings(false)}
+          />
+        </div>
+      );
+    }
+
     return (
       <div className="App">
         <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
@@ -65,9 +82,14 @@ function App() {
           <p>Weekly budget: £{profile.budget}</p>
           <p>Household size: {profile.household_size}</p>
           <p>Preferred supermarket: {profile.preferred_supermarket}</p>
-          <button onClick={handleLogout} style={{ padding: '10px 20px', cursor: 'pointer' }}>
-            Log Out
-          </button>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+            <button onClick={() => setShowSettings(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
+              Settings
+            </button>
+            <button onClick={handleLogout} style={{ padding: '10px 20px', cursor: 'pointer' }}>
+              Log Out
+            </button>
+          </div>
         </div>
       </div>
     );
