@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { useAuth } from './hooks/useAuth';
 import Signup from './components/Signup';
+import Login from './components/Login';
 import { supabase } from './lib/supabase';
 import './App.css';
 
+
 function App() {
   const { user, loading } = useAuth();
+  const [showLogin, setShowLogin] = useState(false);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -30,7 +34,30 @@ function App() {
 
   return (
     <div className="App">
-      <Signup />
+      {showLogin ? <Login /> : <Signup />}
+      <div style={{ textAlign: 'center', marginTop: '10px' }}>
+        {showLogin ? (
+          <p>
+            Don't have an account?{' '}
+            <button
+              onClick={() => setShowLogin(false)}
+              style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Sign Up
+            </button>
+          </p>
+        ) : (
+          <p>
+            Already have an account?{' '}
+            <button
+              onClick={() => setShowLogin(true)}
+              style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
+            >
+              Log In
+            </button>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
