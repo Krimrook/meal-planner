@@ -4,12 +4,15 @@ import Signup from './components/Signup';
 import Login from './components/Login';
 import Onboarding from './components/Onboarding';
 import Settings from './components/Settings';
+import ForgotPassword from './components/ForgotPassword';
+import UpdatePassword from './components/UpdatePassword';
 import { supabase } from './lib/supabase';
 import './App.css';
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, passwordRecovery, setPasswordRecovery } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
@@ -48,8 +51,22 @@ function App() {
     setShowSettings(false);
   };
 
+  const handlePasswordUpdateComplete = () => {
+  setPasswordRecovery(false);
+  setShowLogin(true);
+};
+
   if (loading || profileLoading) {
     return <div className="App">Loading...</div>;
+  }
+
+  // Password recovery flow takes priority over everything else
+  if (passwordRecovery) {
+    return (
+      <div className="App">
+        <UpdatePassword onComplete={handlePasswordUpdateComplete} />
+      </div>
+    );
   }
 
   if (user) {
@@ -95,20 +112,38 @@ function App() {
     );
   }
 
+  if (showForgotPassword) {
+    return (
+      <div className="App">
+        <ForgotPassword onBack={() => setShowForgotPassword(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="App">
       {showLogin ? <Login /> : <Signup />}
       <div style={{ textAlign: 'center', marginTop: '10px' }}>
         {showLogin ? (
-          <p>
-            Don't have an account?{' '}
-            <button
-              onClick={() => setShowLogin(false)}
-              style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
-            >
-              Sign Up
-            </button>
-          </p>
+          <>
+            <p>
+              Don't have an account?{' '}
+              <button
+                onClick={() => setShowLogin(false)}
+                style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Sign Up
+              </button>
+            </p>
+            <p>
+              <button
+                onClick={() => setShowForgotPassword(true)}
+                style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline' }}
+              >
+                Forgot Password?
+              </button>
+            </p>
+          </>
         ) : (
           <p>
             Already have an account?{' '}
