@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Onboarding from './components/Onboarding';
 import Settings from './components/Settings';
 import RecipeLibrary from './components/RecipeLibrary';
+import MealPlanGrid from './components/MealPlanGrid';
 import ForgotPassword from './components/ForgotPassword';
 import UpdatePassword from './components/UpdatePassword';
 import { supabase } from './lib/supabase';
@@ -18,6 +19,7 @@ function App() {
   const [profileLoading, setProfileLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [showRecipes, setShowRecipes] = useState(false);
+  const [showMealPlan, setShowMealPlan] = useState(false);
 
   const fetchProfile = () => {
     return supabase
@@ -43,6 +45,7 @@ function App() {
     setProfile(null);
     setShowSettings(false);
     setShowRecipes(false);
+    setShowMealPlan(false);
   };
 
   const handleOnboardingComplete = () => {
@@ -102,6 +105,14 @@ function App() {
       );
     }
 
+    if (showMealPlan) {
+      return (
+        <div className="App">
+          <MealPlanGrid userId={user.id} onBack={() => setShowMealPlan(false)} />
+        </div>
+      );
+    }
+
     return (
       <div className="App">
         <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
@@ -111,6 +122,9 @@ function App() {
           <p>Household size: {profile.household_size}</p>
           <p>Preferred supermarket: {profile.preferred_supermarket}</p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+            <button onClick={() => setShowMealPlan(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
+              Meal Plan
+            </button>
             <button onClick={() => setShowRecipes(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
               Recipes
             </button>
