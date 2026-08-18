@@ -4,6 +4,7 @@ import Signup from './components/Signup';
 import Login from './components/Login';
 import Onboarding from './components/Onboarding';
 import Settings from './components/Settings';
+import RecipeLibrary from './components/RecipeLibrary';
 import ForgotPassword from './components/ForgotPassword';
 import UpdatePassword from './components/UpdatePassword';
 import { supabase } from './lib/supabase';
@@ -16,6 +17,7 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRecipes, setShowRecipes] = useState(false);
 
   const fetchProfile = () => {
     return supabase
@@ -40,6 +42,7 @@ function App() {
     await supabase.auth.signOut();
     setProfile(null);
     setShowSettings(false);
+    setShowRecipes(false);
   };
 
   const handleOnboardingComplete = () => {
@@ -91,6 +94,14 @@ function App() {
       );
     }
 
+    if (showRecipes) {
+      return (
+        <div className="App">
+          <RecipeLibrary userId={user.id} onBack={() => setShowRecipes(false)} />
+        </div>
+      );
+    }
+
     return (
       <div className="App">
         <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
@@ -100,6 +111,9 @@ function App() {
           <p>Household size: {profile.household_size}</p>
           <p>Preferred supermarket: {profile.preferred_supermarket}</p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+            <button onClick={() => setShowRecipes(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
+              Recipes
+            </button>
             <button onClick={() => setShowSettings(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
               Settings
             </button>
