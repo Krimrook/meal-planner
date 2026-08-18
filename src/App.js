@@ -6,6 +6,7 @@ import Onboarding from './components/Onboarding';
 import Settings from './components/Settings';
 import RecipeLibrary from './components/RecipeLibrary';
 import MealPlanGrid from './components/MealPlanGrid';
+import ShoppingList from './components/ShoppingList';
 import ForgotPassword from './components/ForgotPassword';
 import UpdatePassword from './components/UpdatePassword';
 import { supabase } from './lib/supabase';
@@ -20,6 +21,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showRecipes, setShowRecipes] = useState(false);
   const [showMealPlan, setShowMealPlan] = useState(false);
+  const [showShoppingList, setShowShoppingList] = useState(false);
 
   const fetchProfile = () => {
     return supabase
@@ -46,6 +48,7 @@ function App() {
     setShowSettings(false);
     setShowRecipes(false);
     setShowMealPlan(false);
+    setShowShoppingList(false);
   };
 
   const handleOnboardingComplete = () => {
@@ -113,6 +116,14 @@ function App() {
       );
     }
 
+    if (showShoppingList) {
+      return (
+        <div className="App">
+          <ShoppingList userId={user.id} onBack={() => setShowShoppingList(false)} />
+        </div>
+      );
+    }
+
     return (
       <div className="App">
         <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
@@ -127,6 +138,9 @@ function App() {
             </button>
             <button onClick={() => setShowRecipes(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
               Recipes
+            </button>
+            <button onClick={() => setShowShoppingList(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
+              Shopping List
             </button>
             <button onClick={() => setShowSettings(true)} style={{ padding: '10px 20px', cursor: 'pointer' }}>
               Settings
