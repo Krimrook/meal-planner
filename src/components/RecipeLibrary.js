@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-
-const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Low-Carb', 'High-Protein'];
+import { DIETARY_OPTIONS } from '../constants';
 
 // Recognized unit words, used only to pre-fill the structured form when opening
 // an old recipe that still has free-text ingredient lines (see parseLegacyIngredientLine).

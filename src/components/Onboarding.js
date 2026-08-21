@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
-
-const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Low-Carb', 'High-Protein'];
-const SUPERMARKETS = ['Tesco', "Sainsbury's", 'Asda', 'Morrisons', 'Aldi', 'Lidl', 'Waitrose'];
+import { DIETARY_OPTIONS, SUPERMARKETS } from '../constants';
 
 export default function Onboarding({ userId, onComplete }) {
   const [step, setStep] = useState(1);
