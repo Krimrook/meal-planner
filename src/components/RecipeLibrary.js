@@ -3,14 +3,48 @@ import { supabase } from '../lib/supabase';
 
 const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Gluten-Free', 'Dairy-Free', 'Low-Carb', 'High-Protein'];
 
+// Recognized unit words, used only to pre-fill the structured form when opening
+// an old recipe that still has free-text ingredient lines (see parseLegacyIngredientLine).
+const UNIT_WORDS = [
+  'g', 'kg', 'mg', 'ml', 'l', 'tsp', 'tbsp', 'cup', 'cups', 'oz', 'lb', 'lbs',
+  'clove', 'cloves', 'can', 'cans', 'slice', 'slices', 'piece', 'pieces',
+  'pinch', 'pinches', 'bunch', 'bunches', 'stick', 'sticks',
+];
+
+const emptyIngredientRow = () => ({ name: '', quantity: '', unit: '' });
+
 const emptyForm = {
   name: '',
   servings: '',
   prepTimeMinutes: '',
-  ingredientsText: '',
+  ingredients: [emptyIngredientRow()],
   instructions: '',
   dietaryTags: [],
 };
+
+// Best-effort split of an old free-text ingredient line into { name, quantity, unit }.
+// Only used to pre-fill the edit form for recipes saved before this change — the user
+// reviews/corrects the result in the UI before it's ever saved back structured.
+function parseLegacyIngredientLine(line) {
+  const match = line.match(/^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*(.*)$/);
+  if (match) {
+    const [, qty, maybeUnit, rest] = match;
+    if (maybeUnit && UNIT_WORDS.includes(maybeUnit.toLowerCase())) {
+      return { name: rest.trim(), quantity: qty, unit: maybeUnit.toLowerCase() };
+    }
+    const name = [maybeUnit, rest].filter(Boolean).join(' ').trim();
+    return { name: name || line.trim(), quantity: qty, unit: '' };
+  }
+  return { name: line.trim(), quantity: '', unit: '' };
+}
+
+function formatIngredient(ing) {
+  const parts = [];
+  if (ing.quantity !== null && ing.quantity !== undefined && ing.quantity !== '') parts.push(ing.quantity);
+  if (ing.unit) parts.push(ing.unit);
+  parts.push(ing.name);
+  return parts.join(' ');
+}
 
 export default function RecipeLibrary({ userId, onBack }) {
   const [recipes, setRecipes] = useState([]);
@@ -50,6 +84,22 @@ export default function RecipeLibrary({ userId, onBack }) {
     }));
   };
 
+  const updateIngredientRow = (index, field, value) => {
+    setForm((prev) => {
+      const next = [...prev.ingredients];
+      next[index] = { ...next[index], [field]: value };
+      return { ...prev, ingredients: next };
+    });
+  };
+
+  const addIngredientRow = () => {
+    setForm((prev) => ({ ...prev, ingredients: [...prev.ingredients, emptyIngredientRow()] }));
+  };
+
+  const removeIngredientRow = (index) => {
+    setForm((prev) => ({ ...prev, ingredients: prev.ingredients.filter((_, i) => i !== index) }));
+  };
+
   const startAdd = () => {
     setForm(emptyForm);
     setEditingId(null);
@@ -58,11 +108,25 @@ export default function RecipeLibrary({ userId, onBack }) {
   };
 
   const startEdit = (recipe) => {
+    let ingredientRows;
+    if (recipe.ingredients_structured?.length > 0) {
+      ingredientRows = recipe.ingredients_structured.map((ing) => ({
+        name: ing.name ?? '',
+        quantity: ing.quantity !== null && ing.quantity !== undefined ? String(ing.quantity) : '',
+        unit: ing.unit ?? '',
+      }));
+    } else if (recipe.ingredients?.length > 0) {
+      // Legacy free-text recipe, never migrated — pre-fill best-effort, user reviews before saving.
+      ingredientRows = recipe.ingredients.map(parseLegacyIngredientLine);
+    } else {
+      ingredientRows = [emptyIngredientRow()];
+    }
+
     setForm({
       name: recipe.name,
       servings: recipe.servings ?? '',
       prepTimeMinutes: recipe.prep_time_minutes ?? '',
-      ingredientsText: (recipe.ingredients ?? []).join('\n'),
+      ingredients: ingredientRows,
       instructions: recipe.instructions ?? '',
       dietaryTags: recipe.dietary_tags ?? [],
     });
@@ -80,14 +144,20 @@ export default function RecipeLibrary({ userId, onBack }) {
     setError('');
     setSaving(true);
 
+    const cleanedIngredients = form.ingredients
+      .map((row) => ({
+        name: row.name.trim(),
+        quantity: row.quantity !== '' ? parseFloat(row.quantity) : null,
+        unit: row.unit.trim() || null,
+      }))
+      .filter((row) => row.name);
+
     const payload = {
       name: form.name.trim(),
       servings: form.servings ? parseInt(form.servings, 10) : null,
       prep_time_minutes: form.prepTimeMinutes ? parseInt(form.prepTimeMinutes, 10) : null,
-      ingredients: form.ingredientsText
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean),
+      ingredients_structured: cleanedIngredients,
+      ingredients: [], // clear legacy column now that this recipe is saved in the new structured format
       instructions: form.instructions.trim(),
       dietary_tags: form.dietaryTags,
     };
@@ -160,14 +230,52 @@ export default function RecipeLibrary({ userId, onBack }) {
         </div>
 
         <div style={{ marginBottom: '15px' }}>
-          <label>Ingredients (one per line)</label>
-          <textarea
-            value={form.ingredientsText}
-            onChange={(e) => setForm({ ...form, ingredientsText: e.target.value })}
-            rows={6}
-            placeholder={'200g chicken breast\n1 onion, diced\n2 cloves garlic'}
-            style={{ width: '100%', padding: '8px', marginTop: '5px', fontFamily: 'inherit' }}
-          />
+          <label>Ingredients</label>
+          <p style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>
+            Use decimals for fractions (0.5 instead of ½). Leave quantity/unit blank for things like
+            "1 onion" or "salt to taste".
+          </p>
+          {form.ingredients.map((row, i) => (
+            <div key={i} style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+              <input
+                type="number"
+                step="any"
+                placeholder="Qty"
+                value={row.quantity}
+                onChange={(e) => updateIngredientRow(i, 'quantity', e.target.value)}
+                style={{ width: '70px', padding: '8px' }}
+              />
+              <input
+                type="text"
+                placeholder="Unit (g, cups...)"
+                value={row.unit}
+                onChange={(e) => updateIngredientRow(i, 'unit', e.target.value)}
+                style={{ width: '120px', padding: '8px' }}
+              />
+              <input
+                type="text"
+                placeholder="Ingredient name"
+                value={row.name}
+                onChange={(e) => updateIngredientRow(i, 'name', e.target.value)}
+                style={{ flex: 1, padding: '8px' }}
+              />
+              <button
+                type="button"
+                onClick={() => removeIngredientRow(i)}
+                style={{ padding: '8px 10px', cursor: 'pointer' }}
+                aria-label="Remove ingredient"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addIngredientRow}
+            style={{ marginTop: '10px', padding: '6px 12px', cursor: 'pointer' }}
+          >
+            + Add Ingredient
+          </button>
         </div>
 
         <div style={{ marginBottom: '15px' }}>
@@ -282,16 +390,27 @@ export default function RecipeLibrary({ userId, onBack }) {
               </p>
             )}
 
-            {recipe.ingredients?.length > 0 && (
+            {recipe.ingredients_structured?.length > 0 ? (
               <details style={{ marginBottom: '6px' }}>
                 <summary style={{ cursor: 'pointer' }}>Ingredients</summary>
+                <ul style={{ margin: '8px 0 0 20px' }}>
+                  {recipe.ingredients_structured.map((ing, i) => (
+                    <li key={i}>{formatIngredient(ing)}</li>
+                  ))}
+                </ul>
+              </details>
+            ) : recipe.ingredients?.length > 0 ? (
+              <details style={{ marginBottom: '6px' }}>
+                <summary style={{ cursor: 'pointer' }}>
+                  Ingredients <span style={{ color: '#c0392b', fontSize: '12px' }}>(needs migration — edit &amp; save to convert)</span>
+                </summary>
                 <ul style={{ margin: '8px 0 0 20px' }}>
                   {recipe.ingredients.map((ing, i) => (
                     <li key={i}>{ing}</li>
                   ))}
                 </ul>
               </details>
-            )}
+            ) : null}
 
             {recipe.instructions && (
               <details>

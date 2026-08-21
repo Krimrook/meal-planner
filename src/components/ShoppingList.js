@@ -35,9 +35,38 @@ function formatRangeLabel(start, end) {
 
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
 
+// Rounds to 2dp and strips trailing zeros so summed quantities don't show as
+// 0.30000000000000004 (classic floating point addition artifact).
+function trimNumber(n) {
+  return Number(n.toFixed(2)).toString();
+}
+
+// Folds one ingredient occurrence into the running groups map. Ingredients are grouped
+// by name+unit (case-insensitive) so "200g chicken breast" x2 becomes one 400g line.
+// Ingredients with no quantity (or from recipes not yet migrated to structured
+// ingredients) still get grouped by name, just without a numeric total — they fall
+// back to the old "name ×N" display.
+function addToGroups(groups, rawName, rawUnit, rawQuantity) {
+  const name = (rawName || '').trim();
+  if (!name) return;
+  const unit = (rawUnit || '').trim();
+  const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
+
+  if (!groups[key]) {
+    groups[key] = { key, name, unit, totalQty: 0, hasQty: false, count: 0 };
+  }
+  groups[key].count += 1;
+
+  const qty = rawQuantity !== null && rawQuantity !== undefined && rawQuantity !== '' ? Number(rawQuantity) : null;
+  if (qty !== null && !Number.isNaN(qty)) {
+    groups[key].totalQty += qty;
+    groups[key].hasQty = true;
+  }
+}
+
 export default function ShoppingList({ userId, onBack }) {
   const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
-  const [items, setItems] = useState([]); // [{ text, count }]
+  const [items, setItems] = useState([]); // [{ key, label, count, showCount }]
   const [otherMeals, setOtherMeals] = useState([]); // custom-note entries with no recipe ingredients
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -54,7 +83,7 @@ export default function ShoppingList({ userId, onBack }) {
     return Promise.all([
       supabase
         .from('meal_plan_entries')
-        .select('plan_date, meal_slot, custom_meal_name, recipe:recipes(name, ingredients)')
+        .select('plan_date, meal_slot, custom_meal_name, recipe:recipes(name, ingredients_structured, ingredients)')
         .eq('user_id', userId)
         .gte('plan_date', weekStartISO)
         .lte('plan_date', weekEndISO),
@@ -75,22 +104,32 @@ export default function ShoppingList({ userId, onBack }) {
         return;
       }
 
-      const counts = {};
+      const groups = {};
       const others = [];
 
       (entriesRes.data ?? []).forEach((entry) => {
-        if (entry.recipe?.ingredients?.length > 0) {
-          entry.recipe.ingredients.forEach((line) => {
-            counts[line] = (counts[line] || 0) + 1;
-          });
+        const structured = entry.recipe?.ingredients_structured;
+        const legacy = entry.recipe?.ingredients;
+
+        if (structured?.length > 0) {
+          structured.forEach((ing) => addToGroups(groups, ing.name, ing.unit, ing.quantity));
+        } else if (legacy?.length > 0) {
+          // Recipe hasn't been edited/re-saved since the structured-ingredients change yet —
+          // fall back to treating each free-text line as a name-only item, same as before.
+          legacy.forEach((line) => addToGroups(groups, line, null, null));
         } else if (entry.custom_meal_name) {
           others.push(entry);
         }
       });
 
-      const sortedItems = Object.keys(counts)
-        .sort((a, b) => a.localeCompare(b))
-        .map((text) => ({ text, count: counts[text] }));
+      const sortedItems = Object.values(groups)
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((g) => ({
+          key: g.key,
+          label: g.hasQty ? `${trimNumber(g.totalQty)}${g.unit ? ' ' + g.unit : ''} ${g.name}` : g.name,
+          count: g.count,
+          showCount: !g.hasQty && g.count > 1,
+        }));
 
       others.sort((a, b) => a.plan_date.localeCompare(b.plan_date));
 
@@ -106,14 +145,14 @@ export default function ShoppingList({ userId, onBack }) {
     fetchList();
   }, [fetchList]);
 
-  const toggleItem = async (itemText) => {
-    const isChecked = checkedItems.has(itemText);
+  const toggleItem = async (itemKey) => {
+    const isChecked = checkedItems.has(itemKey);
 
     // Optimistic update
     setCheckedItems((prev) => {
       const next = new Set(prev);
-      if (isChecked) next.delete(itemText);
-      else next.add(itemText);
+      if (isChecked) next.delete(itemKey);
+      else next.add(itemKey);
       return next;
     });
 
@@ -123,13 +162,13 @@ export default function ShoppingList({ userId, onBack }) {
         .delete()
         .eq('user_id', userId)
         .eq('week_start_date', weekStartISO)
-        .eq('item_text', itemText);
+        .eq('item_text', itemKey);
       if (error) setError(error.message);
     } else {
       const { error } = await supabase
         .from('shopping_list_checked_items')
         .upsert(
-          { user_id: userId, week_start_date: weekStartISO, item_text: itemText },
+          { user_id: userId, week_start_date: weekStartISO, item_text: itemKey },
           { onConflict: 'user_id,week_start_date,item_text' }
         );
       if (error) setError(error.message);
@@ -177,10 +216,10 @@ export default function ShoppingList({ userId, onBack }) {
           {items.length > 0 && (
             <ul style={{ listStyle: 'none', padding: 0, textAlign: 'left' }}>
               {items.map((item) => {
-                const checked = checkedItems.has(item.text);
+                const checked = checkedItems.has(item.key);
                 return (
                   <li
-                    key={item.text}
+                    key={item.key}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -191,7 +230,7 @@ export default function ShoppingList({ userId, onBack }) {
                     <input
                       type="checkbox"
                       checked={checked}
-                      onChange={() => toggleItem(item.text)}
+                      onChange={() => toggleItem(item.key)}
                       style={{ marginRight: '10px', cursor: 'pointer' }}
                     />
                     <span
@@ -201,9 +240,9 @@ export default function ShoppingList({ userId, onBack }) {
                         flex: 1,
                       }}
                     >
-                      {item.text}
+                      {item.label}
                     </span>
-                    {item.count > 1 && (
+                    {item.showCount && (
                       <span style={{ color: '#666', fontSize: '13px', marginLeft: '8px' }}>×{item.count}</span>
                     )}
                   </li>
