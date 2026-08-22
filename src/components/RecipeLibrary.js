@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { DIETARY_OPTIONS } from '../constants';
+import { DIETARY_OPTIONS } from '../utils/constants';
 
 const emptyIngredientRow = () => ({ name: '', quantity: '', unit: '' });
 
@@ -42,7 +42,7 @@ export default function RecipeLibrary({ userId }) {
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) setError(error.message);
-        else setRecipes(data);
+        else setRecipes(data ?? []);
         setLoading(false);
       });
   };

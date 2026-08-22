@@ -7,7 +7,7 @@ import {
   Outlet,
   useNavigate,
 } from 'react-router-dom';
-import { useAuth } from './hooks/useAuth';
+import { useAuth } from './hooks/Useauth';
 import Signup from './components/Signup';
 import Login from './components/Login';
 import Onboarding from './components/Onboarding';
@@ -23,7 +23,11 @@ import './App.css';
 
 // Route guard for /signup, /login, /forgot-password — a logged-in user has no
 // reason to see these, so bounce them straight into the app.
-function PublicOnly({ user }) {
+// Exported alongside RequireProfile so both redirect rules can be unit tested
+// directly (mount them under a MemoryRouter with a plain probe route) without
+// needing to also drive the async auth/profile loading that surrounds them
+// inside AppShell.
+export function PublicOnly({ user }) {
   if (user) return <Navigate to="/" replace />;
   return <Outlet />;
 }
@@ -32,17 +36,30 @@ function PublicOnly({ user }) {
 // profile (Welcome, Settings, Recipes, Meal Plan, Shopping List). Mirrors the
 // old inline checks in App.js, just expressed as redirects instead of
 // conditional returns.
-function RequireProfile({ user, profile }) {
+export function RequireProfile({ user, profile }) {
   if (!user) return <Navigate to="/signup" replace />;
   if (!profile) return <Navigate to="/onboarding" replace />;
   return <Outlet />;
 }
 
-function AppShell() {
+// Exported (in addition to the default `App`) so tests can render it inside
+// their own <MemoryRouter initialEntries={[...]}> and control the starting
+// route directly, instead of being stuck with whatever <BrowserRouter> reads
+// from the real browser location.
+export function AppShell() {
   const { user, loading, passwordRecovery, setPasswordRecovery } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [profileLoading, setProfileLoading] = useState(true);
+  // Tracks *which user's* profile `profile` currently reflects, rather than a
+  // plain "are we loading" boolean. A boolean set back to false by the effect
+  // for the previous user (e.g. the logged-out `!user` case) stays stale for
+  // one render after `user` flips to a real session — during that gap
+  // RequireProfile would see a real `user` with `profile` still null and
+  // briefly redirect to /onboarding, even for a user who does have a
+  // profile. Deriving `profileLoading` from "have we fetched for *this*
+  // user yet" is correct on every render, with no such gap.
+  const [profileLoadedForUserId, setProfileLoadedForUserId] = useState(null);
+  const profileLoading = !!user && profileLoadedForUserId !== user.id;
 
   const fetchProfile = () => {
     return supabase
@@ -50,24 +67,27 @@ function AppShell() {
       .select('*')
       .eq('id', user.id)
       .maybeSingle()
-      .then(({ data }) => setProfile(data));
+      .then(({ data }) => {
+        setProfile(data);
+        setProfileLoadedForUserId(user.id);
+      });
   };
 
   useEffect(() => {
     if (!user) {
       setProfile(null);
-      setProfileLoading(false);
+      setProfileLoadedForUserId(null);
       return;
     }
 
-    setProfileLoading(true);
-    fetchProfile().then(() => setProfileLoading(false));
+    fetchProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setProfileLoadedForUserId(null);
     // No explicit navigate needed: once `user` clears, RequireProfile sends
     // any protected route straight to /signup on the next render.
   };

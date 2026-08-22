@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { DIETARY_OPTIONS, SUPERMARKETS } from '../constants';
+import { DIETARY_OPTIONS, SUPERMARKETS } from '../utils/constants';
 
 export default function Settings({ userId, profile, onSave }) {
   const navigate = useNavigate();

@@ -1,81 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-
-function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 (Sun) - 6 (Sat)
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date, n) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
-function toISODate(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function formatDayLabel(date) {
-  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
-}
-
-function formatRangeLabel(start, end) {
-  const startLabel = start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const endLabel = end.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  return `${startLabel} – ${endLabel}`;
-}
-
-// Parses the ?week= param into a valid Monday, falling back to the current
-// week for anything missing or malformed (e.g. a hand-edited URL).
-function weekStartFromParam(param) {
-  if (param) {
-    const parsed = new Date(param);
-    if (!Number.isNaN(parsed.getTime())) {
-      return getMonday(parsed);
-    }
-  }
-  return getMonday(new Date());
-}
+import { addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, getMonday } from '../utils/Dateutils.js';
+import { groupsToItems, addToGroups } from '../utils/Shoppinglistutils.js';
 
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
-
-// Rounds to 2dp and strips trailing zeros so summed quantities don't show as
-// 0.30000000000000004 (classic floating point addition artifact).
-function trimNumber(n) {
-  return Number(n.toFixed(2)).toString();
-}
-
-// Folds one ingredient occurrence into the running groups map. Ingredients are grouped
-// by name+unit (case-insensitive) so "200g chicken breast" x2 becomes one 400g line.
-// Ingredients with no quantity (or from recipes not yet migrated to structured
-// ingredients) still get grouped by name, just without a numeric total — they fall
-// back to the old "name ×N" display.
-function addToGroups(groups, rawName, rawUnit, rawQuantity) {
-  const name = (rawName || '').trim();
-  if (!name) return;
-  const unit = (rawUnit || '').trim();
-  const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
-
-  if (!groups[key]) {
-    groups[key] = { key, name, unit, totalQty: 0, hasQty: false, count: 0 };
-  }
-  groups[key].count += 1;
-
-  const qty = rawQuantity !== null && rawQuantity !== undefined && rawQuantity !== '' ? Number(rawQuantity) : null;
-  if (qty !== null && !Number.isNaN(qty)) {
-    groups[key].totalQty += qty;
-    groups[key].hasQty = true;
-  }
-}
 
 export default function ShoppingList({ userId }) {
   const navigate = useNavigate();
@@ -143,14 +72,7 @@ export default function ShoppingList({ userId }) {
         }
       });
 
-      const sortedItems = Object.values(groups)
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((g) => ({
-          key: g.key,
-          label: g.hasQty ? `${trimNumber(g.totalQty)}${g.unit ? ' ' + g.unit : ''} ${g.name}` : g.name,
-          count: g.count,
-          showCount: !g.hasQty && g.count > 1,
-        }));
+      const sortedItems = groupsToItems(groups);
 
       others.sort((a, b) => a.plan_date.localeCompare(b.plan_date));
 

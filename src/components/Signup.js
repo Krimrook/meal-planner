@@ -54,8 +54,9 @@ export default function Signup() {
       <h2>Sign Up</h2>
       <form onSubmit={handleSignup}>
         <div style={{ marginBottom: '15px' }}>
-          <label>Email</label>
+          <label htmlFor="signup-email">Email</label>
           <input
+            id="signup-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -65,8 +66,9 @@ export default function Signup() {
         </div>
 
         <div style={{ marginBottom: '15px' }}>
-          <label>Password</label>
+          <label htmlFor="signup-password">Password</label>
           <input
+            id="signup-password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -76,8 +78,9 @@ export default function Signup() {
         </div>
 
         <div style={{ marginBottom: '15px' }}>
-          <label>Confirm Password</label>
+          <label htmlFor="signup-confirm-password">Confirm Password</label>
           <input
+            id="signup-confirm-password"
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
