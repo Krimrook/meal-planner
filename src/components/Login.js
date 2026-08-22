@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 export default function Login() {
@@ -60,6 +61,20 @@ export default function Login() {
           {loading ? 'Logging in...' : 'Log In'}
         </button>
       </form>
+
+      <div style={{ textAlign: 'center', marginTop: '10px' }}>
+        <p>
+          Don't have an account?{' '}
+          <Link to="/signup" style={{ color: 'blue', textDecoration: 'underline' }}>
+            Sign Up
+          </Link>
+        </p>
+        <p>
+          <Link to="/forgot-password" style={{ color: 'blue', textDecoration: 'underline' }}>
+            Forgot Password?
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

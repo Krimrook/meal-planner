@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { DIETARY_OPTIONS, SUPERMARKETS } from '../constants';
 
-export default function Settings({ userId, profile, onSave, onBack }) {
+export default function Settings({ userId, profile, onSave }) {
+  const navigate = useNavigate();
   const [budget, setBudget] = useState('');
   const [householdSize, setHouseholdSize] = useState('');
   const [dietaryPreferences, setDietaryPreferences] = useState([]);
@@ -54,7 +56,8 @@ export default function Settings({ userId, profile, onSave, onBack }) {
       setError(error.message);
     } else {
       setSuccess(true);
-      onSave();
+      await onSave();
+      navigate('/');
     }
   };
 
@@ -136,7 +139,7 @@ export default function Settings({ userId, profile, onSave, onBack }) {
       {success && <p style={{ color: 'green' }}>Saved!</p>}
 
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button onClick={onBack} style={{ flex: 1, padding: '10px' }}>
+        <button onClick={() => navigate('/')} style={{ flex: 1, padding: '10px' }}>
           Back
         </button>
         <button onClick={handleSave} disabled={loading} style={{ flex: 1, padding: '10px' }}>

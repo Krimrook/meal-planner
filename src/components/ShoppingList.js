@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 function getMonday(date) {
@@ -33,6 +34,18 @@ function formatRangeLabel(start, end) {
   return `${startLabel} – ${endLabel}`;
 }
 
+// Parses the ?week= param into a valid Monday, falling back to the current
+// week for anything missing or malformed (e.g. a hand-edited URL).
+function weekStartFromParam(param) {
+  if (param) {
+    const parsed = new Date(param);
+    if (!Number.isNaN(parsed.getTime())) {
+      return getMonday(parsed);
+    }
+  }
+  return getMonday(new Date());
+}
+
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
 
 // Rounds to 2dp and strips trailing zeros so summed quantities don't show as
@@ -64,13 +77,26 @@ function addToGroups(groups, rawName, rawUnit, rawQuantity) {
   }
 }
 
-export default function ShoppingList({ userId, onBack }) {
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+export default function ShoppingList({ userId }) {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [weekStart, setWeekStartState] = useState(() => weekStartFromParam(searchParams.get('week')));
   const [items, setItems] = useState([]); // [{ key, label, count, showCount }]
   const [otherMeals, setOtherMeals] = useState([]); // custom-note entries with no recipe ingredients
   const [checkedItems, setCheckedItems] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Keeps the URL's ?week= in sync with whichever week is showing, so the
+  // Shopping List is bookmarkable and the browser back/forward buttons step
+  // through weeks instead of just losing the state entirely.
+  const setWeekStart = (updater) => {
+    setWeekStartState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setSearchParams({ week: toISODate(next) }, { replace: true });
+      return next;
+    });
+  };
 
   const weekEnd = addDays(weekStart, 6);
   const weekStartISO = toISODate(weekStart);
@@ -83,7 +109,7 @@ export default function ShoppingList({ userId, onBack }) {
     return Promise.all([
       supabase
         .from('meal_plan_entries')
-        .select('plan_date, meal_slot, custom_meal_name, recipe:recipes(name, ingredients_structured, ingredients)')
+        .select('plan_date, meal_slot, custom_meal_name, recipe:recipes(name, ingredients_structured)')
         .eq('user_id', userId)
         .gte('plan_date', weekStartISO)
         .lte('plan_date', weekEndISO),
@@ -109,14 +135,9 @@ export default function ShoppingList({ userId, onBack }) {
 
       (entriesRes.data ?? []).forEach((entry) => {
         const structured = entry.recipe?.ingredients_structured;
-        const legacy = entry.recipe?.ingredients;
 
         if (structured?.length > 0) {
           structured.forEach((ing) => addToGroups(groups, ing.name, ing.unit, ing.quantity));
-        } else if (legacy?.length > 0) {
-          // Recipe hasn't been edited/re-saved since the structured-ingredients change yet —
-          // fall back to treating each free-text line as a name-only item, same as before.
-          legacy.forEach((line) => addToGroups(groups, line, null, null));
         } else if (entry.custom_meal_name) {
           others.push(entry);
         }
@@ -179,7 +200,7 @@ export default function ShoppingList({ userId, onBack }) {
     <div style={{ maxWidth: '600px', margin: '50px auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h2 style={{ margin: 0 }}>Shopping List</h2>
-        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer' }}>
+        <button onClick={() => navigate('/')} style={{ padding: '8px 16px', cursor: 'pointer' }}>
           Back
         </button>
       </div>

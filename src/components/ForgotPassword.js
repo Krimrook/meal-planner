@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
-export default function ForgotPassword({ onBack }) {
+export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -30,9 +31,11 @@ export default function ForgotPassword({ onBack }) {
       <div style={{ maxWidth: '400px', margin: '50px auto', textAlign: 'center' }}>
         <h2>Check your email!</h2>
         <p>We sent you a password reset link.</p>
-        <button onClick={onBack} style={{ padding: '10px 20px', cursor: 'pointer', marginTop: '15px' }}>
-          Back to Login
-        </button>
+        <Link to="/login">
+          <button style={{ padding: '10px 20px', cursor: 'pointer', marginTop: '15px' }}>
+            Back to Login
+          </button>
+        </Link>
       </div>
     );
   }
@@ -61,12 +64,12 @@ export default function ForgotPassword({ onBack }) {
           {loading ? 'Sending...' : 'Send Reset Link'}
         </button>
       </form>
-      <button
-        onClick={onBack}
-        style={{ background: 'none', border: 'none', color: 'blue', cursor: 'pointer', textDecoration: 'underline', marginTop: '10px' }}
+      <Link
+        to="/login"
+        style={{ display: 'inline-block', color: 'blue', textDecoration: 'underline', marginTop: '10px' }}
       >
         Back to Login
-      </button>
+      </Link>
     </div>
   );
 }
