@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { DIETARY_OPTIONS } from '../constants';
-
-// Recognized unit words, used only to pre-fill the structured form when opening
-// an old recipe that still has free-text ingredient lines (see parseLegacyIngredientLine).
-const UNIT_WORDS = [
-  'g', 'kg', 'mg', 'ml', 'l', 'tsp', 'tbsp', 'cup', 'cups', 'oz', 'lb', 'lbs',
-  'clove', 'cloves', 'can', 'cans', 'slice', 'slices', 'piece', 'pieces',
-  'pinch', 'pinches', 'bunch', 'bunches', 'stick', 'sticks',
-];
 
 const emptyIngredientRow = () => ({ name: '', quantity: '', unit: '' });
 
@@ -21,22 +14,6 @@ const emptyForm = {
   dietaryTags: [],
 };
 
-// Best-effort split of an old free-text ingredient line into { name, quantity, unit }.
-// Only used to pre-fill the edit form for recipes saved before this change — the user
-// reviews/corrects the result in the UI before it's ever saved back structured.
-function parseLegacyIngredientLine(line) {
-  const match = line.match(/^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s*(.*)$/);
-  if (match) {
-    const [, qty, maybeUnit, rest] = match;
-    if (maybeUnit && UNIT_WORDS.includes(maybeUnit.toLowerCase())) {
-      return { name: rest.trim(), quantity: qty, unit: maybeUnit.toLowerCase() };
-    }
-    const name = [maybeUnit, rest].filter(Boolean).join(' ').trim();
-    return { name: name || line.trim(), quantity: qty, unit: '' };
-  }
-  return { name: line.trim(), quantity: '', unit: '' };
-}
-
 function formatIngredient(ing) {
   const parts = [];
   if (ing.quantity !== null && ing.quantity !== undefined && ing.quantity !== '') parts.push(ing.quantity);
@@ -45,7 +22,8 @@ function formatIngredient(ing) {
   return parts.join(' ');
 }
 
-export default function RecipeLibrary({ userId, onBack }) {
+export default function RecipeLibrary({ userId }) {
+  const navigate = useNavigate();
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -107,19 +85,14 @@ export default function RecipeLibrary({ userId, onBack }) {
   };
 
   const startEdit = (recipe) => {
-    let ingredientRows;
-    if (recipe.ingredients_structured?.length > 0) {
-      ingredientRows = recipe.ingredients_structured.map((ing) => ({
-        name: ing.name ?? '',
-        quantity: ing.quantity !== null && ing.quantity !== undefined ? String(ing.quantity) : '',
-        unit: ing.unit ?? '',
-      }));
-    } else if (recipe.ingredients?.length > 0) {
-      // Legacy free-text recipe, never migrated — pre-fill best-effort, user reviews before saving.
-      ingredientRows = recipe.ingredients.map(parseLegacyIngredientLine);
-    } else {
-      ingredientRows = [emptyIngredientRow()];
-    }
+    const ingredientRows =
+      recipe.ingredients_structured?.length > 0
+        ? recipe.ingredients_structured.map((ing) => ({
+            name: ing.name ?? '',
+            quantity: ing.quantity !== null && ing.quantity !== undefined ? String(ing.quantity) : '',
+            unit: ing.unit ?? '',
+          }))
+        : [emptyIngredientRow()];
 
     setForm({
       name: recipe.name,
@@ -156,7 +129,6 @@ export default function RecipeLibrary({ userId, onBack }) {
       servings: form.servings ? parseInt(form.servings, 10) : null,
       prep_time_minutes: form.prepTimeMinutes ? parseInt(form.prepTimeMinutes, 10) : null,
       ingredients_structured: cleanedIngredients,
-      ingredients: [], // clear legacy column now that this recipe is saved in the new structured format
       instructions: form.instructions.trim(),
       dietary_tags: form.dietaryTags,
     };
@@ -389,7 +361,7 @@ export default function RecipeLibrary({ userId, onBack }) {
               </p>
             )}
 
-            {recipe.ingredients_structured?.length > 0 ? (
+            {recipe.ingredients_structured?.length > 0 && (
               <details style={{ marginBottom: '6px' }}>
                 <summary style={{ cursor: 'pointer' }}>Ingredients</summary>
                 <ul style={{ margin: '8px 0 0 20px' }}>
@@ -398,18 +370,7 @@ export default function RecipeLibrary({ userId, onBack }) {
                   ))}
                 </ul>
               </details>
-            ) : recipe.ingredients?.length > 0 ? (
-              <details style={{ marginBottom: '6px' }}>
-                <summary style={{ cursor: 'pointer' }}>
-                  Ingredients <span style={{ color: '#c0392b', fontSize: '12px' }}>(needs migration — edit &amp; save to convert)</span>
-                </summary>
-                <ul style={{ margin: '8px 0 0 20px' }}>
-                  {recipe.ingredients.map((ing, i) => (
-                    <li key={i}>{ing}</li>
-                  ))}
-                </ul>
-              </details>
-            ) : null}
+            )}
 
             {recipe.instructions && (
               <details>
@@ -421,7 +382,7 @@ export default function RecipeLibrary({ userId, onBack }) {
         ))
       )}
 
-      <button onClick={onBack} style={{ padding: '10px 20px', cursor: 'pointer', marginTop: '10px' }}>
+      <button onClick={() => navigate('/')} style={{ padding: '10px 20px', cursor: 'pointer', marginTop: '10px' }}>
         Back
       </button>
     </div>

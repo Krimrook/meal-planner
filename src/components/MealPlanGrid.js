@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
 const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'];
@@ -36,8 +37,22 @@ function formatRangeLabel(start, end) {
   return `${startLabel} – ${endLabel}`;
 }
 
-export default function MealPlanGrid({ userId, onBack }) {
-  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()));
+// Parses the ?week= param into a valid Monday, falling back to the current
+// week for anything missing or malformed (e.g. a hand-edited URL).
+function weekStartFromParam(param) {
+  if (param) {
+    const parsed = new Date(param);
+    if (!Number.isNaN(parsed.getTime())) {
+      return getMonday(parsed);
+    }
+  }
+  return getMonday(new Date());
+}
+
+export default function MealPlanGrid({ userId }) {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [weekStart, setWeekStartState] = useState(() => weekStartFromParam(searchParams.get('week')));
   const [recipes, setRecipes] = useState([]);
   const [entries, setEntries] = useState({});
   const [loading, setLoading] = useState(true);
@@ -48,6 +63,17 @@ export default function MealPlanGrid({ userId, onBack }) {
   const [editRecipeId, setEditRecipeId] = useState('');
   const [editCustomText, setEditCustomText] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Keeps the URL's ?week= in sync with whichever week is showing, so the
+  // Meal Plan is bookmarkable and the browser back/forward buttons step
+  // through weeks instead of just losing the state entirely.
+  const setWeekStart = (updater) => {
+    setWeekStartState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setSearchParams({ week: toISODate(next) }, { replace: true });
+      return next;
+    });
+  };
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const weekEnd = days[6];
@@ -267,7 +293,7 @@ export default function MealPlanGrid({ userId, onBack }) {
     <div style={{ maxWidth: '800px', margin: '50px auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h2 style={{ margin: 0 }}>Weekly Meal Plan</h2>
-        <button onClick={onBack} style={{ padding: '8px 16px', cursor: 'pointer' }}>
+        <button onClick={() => navigate('/')} style={{ padding: '8px 16px', cursor: 'pointer' }}>
           Back
         </button>
       </div>

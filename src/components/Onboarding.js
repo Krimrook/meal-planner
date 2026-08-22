@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { DIETARY_OPTIONS, SUPERMARKETS } from '../constants';
 
 export default function Onboarding({ userId, onComplete }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [budget, setBudget] = useState('');
   const [householdSize, setHouseholdSize] = useState('');
@@ -42,7 +44,8 @@ export default function Onboarding({ userId, onComplete }) {
     if (error) {
       setError(error.message);
     } else {
-      onComplete();
+      await onComplete();
+      navigate('/', { replace: true });
     }
   };
 
