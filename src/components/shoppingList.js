@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, getMonday } from '../utils/Dateutils.js';
-import { groupsToItems, addToGroups } from '../utils/Shoppinglistutils.js';
+import { addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, getMonday } from '../utils/dateutils.js';
+import { groupsToItems, addToGroups } from '../utils/shoppinglistutils.js';
 
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
 

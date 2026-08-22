@@ -1,4 +1,4 @@
-import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam } from './Dateutils.js';
+import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam } from './dateutils.js';
 
 describe('getMonday', () => {
   test('returns the same date when given a Monday', () => {

@@ -7,19 +7,19 @@ import {
   Outlet,
   useNavigate,
 } from 'react-router-dom';
-import { useAuth } from './hooks/Useauth';
-import Signup from './components/Signup';
-import Login from './components/Login';
-import Onboarding from './components/Onboarding';
-import Settings from './components/Settings';
-import RecipeLibrary from './components/RecipeLibrary';
-import MealPlanGrid from './components/MealPlanGrid';
-import ShoppingList from './components/ShoppingList';
-import ForgotPassword from './components/ForgotPassword';
-import UpdatePassword from './components/UpdatePassword';
-import Welcome from './components/Welcome';
+import { useAuth } from './hooks/useauth';
+import Signup from './components/signup';
+import Login from './components/login';
+import Onboarding from './components/onboarding';
+import Settings from './components/settings';
+import RecipeLibrary from './components/recipeLibrary';
+import MealPlanGrid from './components/mealPlanGrid';
+import ShoppingList from './components/shoppingList';
+import ForgotPassword from './components/forgotPassword';
+import UpdatePassword from './components/updatePassword';
+import Welcome from './components/welcome';
 import { supabase } from './lib/supabase';
-import './App.css';
+import './app.css';
 
 // Route guard for /signup, /login, /forgot-password — a logged-in user has no
 // reason to see these, so bounce them straight into the app.
@@ -61,16 +61,23 @@ export function AppShell() {
   const [profileLoadedForUserId, setProfileLoadedForUserId] = useState(null);
   const profileLoading = !!user && profileLoadedForUserId !== user.id;
 
-  const fetchProfile = () => {
-    return supabase
+  const fetchProfile = async () => {
+    if (!user) return null;
+
+    const userId = user.id;
+    const { data, error } = await supabase
       .from('user_profiles')
       .select('*')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setProfile(data);
-        setProfileLoadedForUserId(user.id);
-      });
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Failed to load profile:', error);
+    }
+
+    setProfile(data ?? null);
+    setProfileLoadedForUserId(userId);
+    return data ?? null;
   };
 
   useEffect(() => {

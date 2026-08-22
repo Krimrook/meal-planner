@@ -1,4 +1,4 @@
-import { trimNumber, addToGroups, groupsToItems } from './Shoppinglistutils.js';
+import { trimNumber, addToGroups, groupsToItems } from './shoppinglistutils.js';
 
 describe('trimNumber', () => {
   test('strips floating point addition artifacts', () => {

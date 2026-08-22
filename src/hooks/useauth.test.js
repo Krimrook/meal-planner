@@ -1,5 +1,5 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { useAuth } from './Useauth';
+import { useAuth } from './useauth';
 
 jest.mock('../lib/supabase');
 // eslint-disable-next-line import/first
