@@ -1,6 +1,6 @@
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import { PublicOnly, RequireProfile, AppShell } from './App';
+import { PublicOnly, RequireProfile, AppShell } from './app';
 
 jest.mock('./lib/supabase');
 // eslint-disable-next-line import/first

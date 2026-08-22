@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import Signup from './Signup';
+import Signup from './signup';
 
 jest.mock('../lib/supabase');
 // eslint-disable-next-line import/first
