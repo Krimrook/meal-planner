@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { DIETARY_OPTIONS } from '../utils/constants';
+import { DIETARY_OPTIONS, COMMON_UNITS } from '../utils/constants';
 
 const emptyIngredientRow = () => ({ name: '', quantity: '', unit: '' });
 
@@ -204,7 +204,7 @@ export default function RecipeLibrary({ userId }) {
           <label>Ingredients</label>
           <p style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>
             Use decimals for fractions (0.5 instead of ½). Leave quantity/unit blank for things like
-            "1 onion" or "salt to taste".
+            "1 onion" or "salt to taste". Unit has suggestions, but you can type anything.
           </p>
           {form.ingredients.map((row, i) => (
             <div key={i} style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
@@ -217,6 +217,7 @@ export default function RecipeLibrary({ userId }) {
                 style={{ width: '70px', padding: '8px' }}
               />
               <input
+                list="unit-suggestions"
                 type="text"
                 placeholder="Unit (g, cups...)"
                 value={row.unit}
@@ -240,6 +241,15 @@ export default function RecipeLibrary({ userId }) {
               </button>
             </div>
           ))}
+          {/* Shared by every unit input above via the list="unit-suggestions" attribute —
+              one <datalist> in the DOM is enough for all of them. Native browser combobox:
+              shows a dropdown of suggestions on focus/typing, but the field stays free text,
+              so anything not in COMMON_UNITS can still be typed in directly. */}
+          <datalist id="unit-suggestions">
+            {COMMON_UNITS.map((unit) => (
+              <option key={unit} value={unit} />
+            ))}
+          </datalist>
           <button
             type="button"
             onClick={addIngredientRow}

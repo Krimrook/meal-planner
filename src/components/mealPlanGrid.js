@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam } from '../utils/dateutils.js';
+import { COMMON_MEAL_NOTES } from '../utils/constants';
 
 const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'];
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
@@ -20,6 +21,11 @@ export default function MealPlanGrid({ userId }) {
   const [editRecipeId, setEditRecipeId] = useState('');
   const [editCustomText, setEditCustomText] = useState('');
   const [saving, setSaving] = useState(false);
+  // Set only when Next/Previous has to cross into an adjacent week: holds the
+  // slot to open automatically once that week's entries finish loading, since
+  // fetchEntries is async and the target slot's saved data (if any) isn't
+  // available until it resolves.
+  const [pendingOpenSlot, setPendingOpenSlot] = useState(null);
 
   // Keeps the URL's ?week= in sync with whichever week is showing, so the
   // Meal Plan is bookmarkable and the browser back/forward buttons step
@@ -35,6 +41,18 @@ export default function MealPlanGrid({ userId }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const weekEnd = days[6];
   const todayISO = toISODate(new Date());
+
+  // Every slot in the currently displayed week, in the order a user would
+  // naturally step through them: Mon breakfast, Mon lunch, Mon dinner, Tue
+  // breakfast, ... This is what Previous/Next walk along.
+  const flatSlots = days.flatMap((day) => {
+    const dateISO = toISODate(day);
+    return MEAL_SLOTS.map((slot) => ({ dateISO, slot }));
+  });
+
+  const currentIndex = editingCell
+    ? flatSlots.findIndex((s) => s.dateISO === editingCell.dateISO && s.slot === editingCell.slot)
+    : -1;
 
   const fetchEntries = useCallback(() => {
     setLoading(true);
@@ -73,6 +91,17 @@ export default function MealPlanGrid({ userId }) {
         if (!error) setRecipes(data ?? []);
       });
   }, [userId]);
+
+  // Once a week-crossing Next/Previous finishes loading the new week's
+  // entries, open whichever slot was requested (Monday breakfast when moving
+  // forward, Sunday dinner when moving back) using the now-fresh data.
+  useEffect(() => {
+    if (!loading && pendingOpenSlot) {
+      openCell(pendingOpenSlot.dateISO, pendingOpenSlot.slot);
+      setPendingOpenSlot(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, pendingOpenSlot]);
 
   const openCell = (dateISO, slot) => {
     const existing = entries[`${dateISO}_${slot}`];
@@ -131,6 +160,76 @@ export default function MealPlanGrid({ userId }) {
     fetchEntries();
   };
 
+  // Used by Previous/Next: saves the slot currently being edited only if
+  // something's actually been entered for it, so stepping through empty
+  // slots doesn't force a choice on every one — you can skip past a slot you
+  // don't want to plan yet, the same way "+ Add" on the grid works. Unlike
+  // handleSaveCell above, this never blocks navigation with a validation
+  // error, since an empty slot is a valid "nothing planned yet" state here.
+  const saveCurrentIfFilled = async () => {
+    if (!editingCell) return true;
+
+    const hasRecipe = editMode === 'recipe' && editRecipeId;
+    const hasCustom = editMode === 'custom' && editCustomText.trim();
+    if (!hasRecipe && !hasCustom) {
+      return true;
+    }
+
+    setError('');
+    setSaving(true);
+
+    const payload = {
+      user_id: userId,
+      plan_date: editingCell.dateISO,
+      meal_slot: editingCell.slot,
+      recipe_id: editMode === 'recipe' ? editRecipeId : null,
+      custom_meal_name: editMode === 'custom' ? editCustomText.trim() : null,
+    };
+
+    const { error } = await supabase
+      .from('meal_plan_entries')
+      .upsert(payload, { onConflict: 'user_id,plan_date,meal_slot' });
+
+    setSaving(false);
+
+    if (error) {
+      setError(error.message);
+      return false;
+    }
+
+    fetchEntries();
+    return true;
+  };
+
+  // Moves the edit view to the previous (-1) or next (+1) slot in sequence —
+  // this is what lets you go breakfast -> lunch -> dinner -> next day's
+  // breakfast without dropping back to the grid in between. At either end of
+  // the currently-loaded week it rolls into the adjacent week automatically.
+  const goToRelativeSlot = async (delta) => {
+    const ok = await saveCurrentIfFilled();
+    if (!ok) return;
+
+    const nextIndex = currentIndex + delta;
+
+    if (nextIndex >= 0 && nextIndex < flatSlots.length) {
+      const target = flatSlots[nextIndex];
+      openCell(target.dateISO, target.slot);
+      return;
+    }
+
+    // Ran off the edge of the week — roll into the adjacent week and open
+    // its first (Monday breakfast) or last (Sunday dinner) slot once that
+    // week's entries have loaded (handled by the pendingOpenSlot effect).
+    const newWeekStart = addDays(weekStart, delta > 0 ? 7 : -7);
+    const targetSlot =
+      delta > 0
+        ? { dateISO: toISODate(newWeekStart), slot: 'breakfast' }
+        : { dateISO: toISODate(addDays(newWeekStart, 6)), slot: 'dinner' };
+
+    setPendingOpenSlot(targetSlot);
+    setWeekStart(newWeekStart);
+  };
+
   const handleClearCell = async () => {
     const existing = entries[`${editingCell.dateISO}_${editingCell.slot}`];
     if (!existing) {
@@ -154,12 +253,30 @@ export default function MealPlanGrid({ userId }) {
   };
 
   if (view === 'edit' && editingCell) {
+    // Waiting on the adjacent week's entries to load before we can show the
+    // target slot pre-filled with its saved data (if any).
+    if (pendingOpenSlot) {
+      return (
+        <div style={{ maxWidth: '450px', margin: '50px auto', textAlign: 'center' }}>
+          <p style={{ color: '#666' }}>Loading...</p>
+        </div>
+      );
+    }
+
     const dayLabel = formatDayLabel(new Date(editingCell.dateISO));
+    const isFirstSlot = currentIndex === 0;
+    const isLastSlot = currentIndex === flatSlots.length - 1;
+
     return (
       <div style={{ maxWidth: '450px', margin: '50px auto' }}>
-        <h2>
+        <h2 style={{ marginBottom: '4px' }}>
           {dayLabel} · {SLOT_LABELS[editingCell.slot]}
         </h2>
+        {currentIndex !== -1 && (
+          <p style={{ color: '#666', fontSize: '13px', marginTop: 0 }}>
+            Slot {currentIndex + 1} of {flatSlots.length} this week
+          </p>
+        )}
 
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
           <button
@@ -214,18 +331,24 @@ export default function MealPlanGrid({ userId }) {
           <div style={{ marginBottom: '20px' }}>
             <label>Note</label>
             <input
+              list="meal-note-suggestions"
               type="text"
               value={editCustomText}
               onChange={(e) => setEditCustomText(e.target.value)}
               placeholder="e.g. leftovers, eating out"
               style={{ width: '100%', padding: '8px', marginTop: '5px' }}
             />
+            <datalist id="meal-note-suggestions">
+              {COMMON_MEAL_NOTES.map((note) => (
+                <option key={note} value={note} />
+              ))}
+            </datalist>
           </div>
         )}
 
         {error && <p style={{ color: 'red' }}>{error}</p>}
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
           <button
             onClick={() => {
               setView('grid');
@@ -239,7 +362,27 @@ export default function MealPlanGrid({ userId }) {
             Clear
           </button>
           <button onClick={handleSaveCell} disabled={saving} style={{ flex: 1, padding: '10px' }}>
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : 'Save & Close'}
+          </button>
+        </div>
+
+        {/* The step-through-the-week controls: saves the current slot only if
+            something's filled in, then moves on. This is the "breakfast ->
+            lunch -> dinner -> next day's breakfast" flow. */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => goToRelativeSlot(-1)}
+            disabled={saving}
+            style={{ flex: 1, padding: '10px' }}
+          >
+            {isFirstSlot ? '← Prev Week' : '← Previous'}
+          </button>
+          <button
+            onClick={() => goToRelativeSlot(1)}
+            disabled={saving}
+            style={{ flex: 1, padding: '10px', fontWeight: 'bold', background: '#eef' }}
+          >
+            {isLastSlot ? 'Next Week →' : 'Next →'}
           </button>
         </div>
       </div>
