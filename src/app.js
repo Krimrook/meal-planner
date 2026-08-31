@@ -18,6 +18,7 @@ import ShoppingList from './components/shoppingList';
 import ForgotPassword from './components/forgotPassword';
 import UpdatePassword from './components/updatePassword';
 import Welcome from './components/welcome';
+import NavBar from './components/navbar.js';
 import { supabase } from './lib/supabase';
 import './app.css';
 
@@ -35,11 +36,18 @@ export function PublicOnly({ user }) {
 // Route guard for every screen that needs a logged-in user with a completed
 // profile (Welcome, Settings, Recipes, Meal Plan, Shopping List). Mirrors the
 // old inline checks in App.js, just expressed as redirects instead of
-// conditional returns.
+// conditional returns. Day 6: also renders the persistent NavBar above the
+// Outlet, since every route in this group is a "logged in with a profile"
+// screen — the one place that's true for all of them.
 export function RequireProfile({ user, profile }) {
   if (!user) return <Navigate to="/signup" replace />;
   if (!profile) return <Navigate to="/onboarding" replace />;
-  return <Outlet />;
+  return (
+    <>
+      <NavBar />
+      <Outlet />
+    </>
+  );
 }
 
 // Exported (in addition to the default `App`) so tests can render it inside
