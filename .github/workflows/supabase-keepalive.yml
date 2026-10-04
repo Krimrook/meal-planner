@@ -1,0 +1,26 @@
+name: Supabase Keep-Alive
+
+# Pings the Supabase REST API twice a week so the free-tier project
+# never crosses the 7-day inactivity window that triggers an auto-pause.
+# Comfortable margin: 3-4 days between pings, well under 7.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1,4'   # Mon & Thu, 09:00 UTC
+  workflow_dispatch: {}     # lets you trigger it manually from the Actions tab to test
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/recipes?select=id&limit=1" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+          echo "Supabase REST API responded with HTTP $STATUS"
+          if [ "$STATUS" -ge 400 ]; then
+            echo "Non-success status from Supabase — failing the job so it shows up as a failed run"
+            exit 1
+          fi
