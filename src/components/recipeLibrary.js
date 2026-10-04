@@ -164,6 +164,17 @@ export default function RecipeLibrary({ userId }) {
     }
   };
 
+ // Unique ingredient names across all of this user's recipes, derived from the
+  // recipes already in state (no extra Supabase query). Feeds the
+  // ingredient-suggestions datalist below.
+  const knownIngredientNames = Array.from(
+    new Set(
+      recipes.flatMap((r) =>
+        (r.ingredients_structured ?? []).map((ing) => ing.name).filter(Boolean)
+      )
+    )
+  ).sort();
+  
   if (view === 'form') {
     return (
       <div style={{ maxWidth: '500px', margin: '50px auto' }}>
@@ -255,6 +266,13 @@ export default function RecipeLibrary({ userId }) {
             onClick={addIngredientRow}
             style={{ marginTop: '10px', padding: '6px 12px', cursor: 'pointer' }}
           >
+             {/* Same pattern as unit-suggestions: suggestions only, the field stays
+              free text. Built from the user's own saved recipes. */}
+          <datalist id="ingredient-suggestions">
+            {knownIngredientNames.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
             + Add Ingredient
           </button>
         </div>
