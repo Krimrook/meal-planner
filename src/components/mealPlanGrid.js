@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam } from '../utils/dateutils.js';
+import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, readStoredWeek, writeStoredWeek } from '../utils/dateutils.js';
 import { COMMON_MEAL_NOTES } from '../utils/constants';
 
 const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'];
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+const WEEK_STORAGE_KEY = 'mealPlanWeek';
 
 export default function MealPlanGrid({ userId }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [weekStart, setWeekStartState] = useState(() => weekStartFromParam(searchParams.get('week')));
+  const [weekStart, setWeekStartState] = useState(() =>
+  weekStartFromParam(searchParams.get('week') || readStoredWeek(WEEK_STORAGE_KEY))
+);
   const [recipes, setRecipes] = useState([]);
   const [entries, setEntries] = useState({});
   const [loading, setLoading] = useState(true);
@@ -31,12 +34,24 @@ export default function MealPlanGrid({ userId }) {
   // Meal Plan is bookmarkable and the browser back/forward buttons step
   // through weeks instead of just losing the state entirely.
   const setWeekStart = (updater) => {
-    setWeekStartState((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setSearchParams({ week: toISODate(next) }, { replace: true });
-      return next;
-    });
-  };
+  setWeekStartState((prev) => {
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    const iso = toISODate(next);
+    setSearchParams({ week: iso }, { replace: true });
+    writeStoredWeek(WEEK_STORAGE_KEY, iso);
+    return next;
+  });
+};
+
+// If we landed here without a ?week= param (e.g. via the NavBar, or the
+// Welcome screen's Back button) but have a remembered week from a
+// previous visit, backfill the URL so it's bookmarkable immediately.
+useEffect(() => {
+  if (!searchParams.get('week')) {
+    setSearchParams({ week: toISODate(weekStart) }, { replace: true });
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const weekEnd = days[6];

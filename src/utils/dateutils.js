@@ -46,3 +46,26 @@ export function weekStartFromParam(param) {
   }
   return getMonday(new Date());
 }
+
+// Remembers the last-viewed week per screen across navigating away and
+// back (NavBar, Back button, browser back) — the ?week= URL param alone
+// only survives bookmarking/back-forward *within* a screen, not leaving it
+// entirely and returning. Wrapped in try/catch since localStorage can throw
+// in some environments (private browsing, storage disabled, quota) —
+// persistence here is a nice-to-have, never something that should crash
+// the screen if it's unavailable.
+export function readStoredWeek(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredWeek(key, isoDate) {
+  try {
+    localStorage.setItem(key, isoDate);
+  } catch {
+    // best-effort only
+  }
+}

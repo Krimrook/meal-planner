@@ -1,15 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, getMonday } from '../utils/dateutils.js';
+import { addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, getMonday, readStoredWeek, writeStoredWeek } from '../utils/dateutils.js';
 import { groupsToItems, addToGroups } from '../utils/shoppinglistutils.js';
 
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+const WEEK_STORAGE_KEY = 'shoppingListWeek';
 
 export default function ShoppingList({ userId }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [weekStart, setWeekStartState] = useState(() => weekStartFromParam(searchParams.get('week')));
+  const [weekStart, setWeekStartState] = useState(() =>
+  weekStartFromParam(searchParams.get('week') || readStoredWeek(WEEK_STORAGE_KEY))
+);
   const [items, setItems] = useState([]); // [{ key, label, count, showCount }]
   const [otherMeals, setOtherMeals] = useState([]); // custom-note entries with no recipe ingredients
   const [checkedItems, setCheckedItems] = useState(new Set());
@@ -20,12 +23,24 @@ export default function ShoppingList({ userId }) {
   // Shopping List is bookmarkable and the browser back/forward buttons step
   // through weeks instead of just losing the state entirely.
   const setWeekStart = (updater) => {
-    setWeekStartState((prev) => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      setSearchParams({ week: toISODate(next) }, { replace: true });
-      return next;
-    });
-  };
+  setWeekStartState((prev) => {
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    const iso = toISODate(next);
+    setSearchParams({ week: iso }, { replace: true });
+    writeStoredWeek(WEEK_STORAGE_KEY, iso);
+    return next;
+  });
+};
+
+// If we landed here without a ?week= param (e.g. via the NavBar, or the
+// Welcome screen's Back button) but have a remembered week from a
+// previous visit, backfill the URL so it's bookmarkable immediately.
+useEffect(() => {
+  if (!searchParams.get('week')) {
+    setSearchParams({ week: toISODate(weekStart) }, { replace: true });
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
 
   const weekEnd = addDays(weekStart, 6);
   const weekStartISO = toISODate(weekStart);
