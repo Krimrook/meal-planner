@@ -2,6 +2,8 @@
 // the grouping/rounding logic can be unit tested directly, without needing to
 // render the component or talk to Supabase.
 
+import { AISLES, DEFAULT_AISLE, AISLE_QUALIFIERS, AISLE_KEYWORDS } from './constants.js';
+
 // Rounds to 2dp and strips trailing zeros so summed quantities don't show as
 // 0.30000000000000004 (classic floating point addition artifact).
 export function trimNumber(n) {
@@ -38,8 +40,64 @@ export function groupsToItems(groups) {
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((g) => ({
       key: g.key,
+      name: g.name,
       label: g.hasQty ? `${trimNumber(g.totalQty)}${g.unit ? ' ' + g.unit : ''} ${g.name}` : g.name,
       count: g.count,
       showCount: !g.hasQty && g.count > 1,
     }));
+}
+
+// --- Aisle grouping ---------------------------------------------------------
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Matches a whole word, with an optional plural ending, so "egg" matches
+// "eggs" and "tomato" matches "tomatoes" — but "ham" doesn't match "shame".
+function wordPattern(word) {
+  return new RegExp(`\\b${escapeRegExp(word)}(s|es)?\\b`);
+}
+
+const QUALIFIER_INDEX = Object.entries(AISLE_QUALIFIERS).map(([word, aisle]) => ({
+  aisle,
+  pattern: wordPattern(word),
+}));
+
+// Every keyword from every aisle, flattened into one list and sorted longest
+// first. Built once when the module loads, not on every guessAisle() call.
+// Because it's longest-first, the first match found is the most specific one.
+const KEYWORD_INDEX = Object.entries(AISLE_KEYWORDS)
+  .flatMap(([aisle, keywords]) => keywords.map((keyword) => ({ aisle, keyword, pattern: wordPattern(keyword) })))
+  .sort((a, b) => b.keyword.length - a.keyword.length);
+
+// Best-guess aisle for an ingredient name, from the keyword lists in
+// constants.js. Returns DEFAULT_AISLE ('Other') when nothing matches — it's a
+// starting point for the user to correct, not something that has to be right.
+export function guessAisle(rawName) {
+  const name = (rawName || '').toLowerCase();
+
+  const qualifier = QUALIFIER_INDEX.find((q) => q.pattern.test(name));
+  if (qualifier) return qualifier.aisle;
+
+  const hit = KEYWORD_INDEX.find((k) => k.pattern.test(name));
+  return hit ? hit.aisle : DEFAULT_AISLE;
+}
+
+// Splits the display-ready items into aisle sections, in AISLES order, leaving
+// out any aisle with nothing in it. `overrides` is an optional
+// { 'ingredient name in lowercase': 'Aisle' } map that beats the guess — an
+// override naming an aisle that isn't in AISLES is ignored rather than trusted.
+// Items keep their alphabetical order (from groupsToItems) within each aisle.
+export function groupsToSections(groups, overrides = {}) {
+  const byAisle = {};
+
+  groupsToItems(groups).forEach((item) => {
+    const override = overrides[item.name.toLowerCase()];
+    const aisle = AISLES.includes(override) ? override : guessAisle(item.name);
+    if (!byAisle[aisle]) byAisle[aisle] = [];
+    byAisle[aisle].push({ ...item, aisle });
+  });
+
+  return AISLES.filter((aisle) => byAisle[aisle]).map((aisle) => ({ aisle, items: byAisle[aisle] }));
 }
