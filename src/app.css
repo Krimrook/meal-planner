@@ -1,38 +1,332 @@
+/* Day 10 styling pass. Replaces the create-react-app boilerplate that used to
+   live here (spinning logo etc., never used). Base element styles below give
+   every existing screen a consistent look without touching their inline
+   styles; the small set of classes further down is used by the new screens
+   and anything restyled since. */
+
+:root {
+  --green: #2f7d4f;
+  --green-dark: #24613d;
+  --green-soft: #e8f3ec;
+  --amber: #b26a00;
+  --amber-soft: #fff4e0;
+  --red: #b3261e;
+  --red-soft: #fdecea;
+  --ink: #1f2420;
+  --muted: #667066;
+  --line: #e2e6e2;
+  --bg: #f7f8f6;
+  --radius: 8px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
 .App {
   text-align: center;
+  padding: 0 16px 48px;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+h2 {
+  font-size: 1.5rem;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+button {
+  font: inherit;
+  border: 1px solid #c9d0c9;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+button:hover:not(:disabled) {
+  background: #f0f3f0;
+  border-color: #aab4aa;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  border: 1px solid #c9d0c9;
+  border-radius: 6px;
+  background: #fff;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
+
+input[type='checkbox'] {
+  accent-color: var(--green);
+}
+
+/* --- Layout ---------------------------------------------------------------- */
+
+.page {
+  max-width: 720px;
+  margin: 32px auto;
+  text-align: left;
+}
+
+.page-narrow {
+  max-width: 480px;
+}
+
+.page-header {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
 }
 
-.App-link {
-  color: #61dafb;
+.page-header h2 {
+  margin: 0;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* --- Text ------------------------------------------------------------------ */
+
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.error {
+  color: var(--red);
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* --- Buttons --------------------------------------------------------------- */
+
+.btn {
+  padding: 8px 14px;
+}
+
+.btn-primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--green-dark);
+  border-color: var(--green-dark);
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--green);
+  text-decoration: underline;
+}
+
+.btn-link:hover:not(:disabled) {
+  background: none;
+}
+
+/* --- Pills / tags ---------------------------------------------------------- */
+
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  background: #eef0ee;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.pill-green {
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+
+.pill-amber {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+/* --- Budget meter ---------------------------------------------------------- */
+
+.budget-meter {
+  height: 10px;
+  border-radius: 999px;
+  background: #e6e9e6;
+  overflow: hidden;
+  margin: 8px 0 6px;
+}
+
+.budget-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+
+.budget-meter.over > span {
+  background: var(--red);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stat {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Nav bar --------------------------------------------------------------- */
+
+.navbar {
+  display: flex;
+  gap: 4px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+  align-items: center;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.navbar a {
+  padding: 6px 12px;
+  text-decoration: none;
+  color: var(--ink);
+  border-radius: 6px;
+}
+
+.navbar a:hover {
+  background: #eef0ee;
+}
+
+.navbar a.active {
+  background: var(--green);
+  color: #fff;
+  font-weight: 600;
+}
+
+.navbar .spacer {
+  flex: 1;
+}
+
+.navbar button {
+  padding: 6px 12px;
+}
+
+/* --- Form bits ------------------------------------------------------------- */
+
+.field {
+  margin-bottom: 14px;
+}
+
+.field label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  padding: 8px;
+}
+
+.checkbox-row label {
+  margin-right: 14px;
+  white-space: nowrap;
+}
+
+/* --- Lists ----------------------------------------------------------------- */
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #eef0ee;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 560px) {
+  .page {
+    margin-top: 16px;
   }
-  to {
-    transform: rotate(360deg);
+  .hide-mobile {
+    display: none;
   }
 }

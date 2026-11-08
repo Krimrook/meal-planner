@@ -3,6 +3,7 @@
 // render the component or talk to Supabase.
 
 import { AISLES, DEFAULT_AISLE, AISLE_QUALIFIERS, AISLE_KEYWORDS } from './constants.js';
+import { buildKeywordIndex, findKeyword } from './matchUtils.js';
 
 // Rounds to 2dp and strips trailing zeros so summed quantities don't show as
 // 0.30000000000000004 (classic floating point addition artifact).
@@ -44,43 +45,33 @@ export function groupsToItems(groups) {
       label: g.hasQty ? `${trimNumber(g.totalQty)}${g.unit ? ' ' + g.unit : ''} ${g.name}` : g.name,
       count: g.count,
       showCount: !g.hasQty && g.count > 1,
+      // Raw numbers kept alongside the display label so the item can be
+      // costed (priceUtils.js) without re-parsing the label text.
+      unit: g.unit,
+      quantity: g.hasQty ? g.totalQty : null,
     }));
 }
 
 // --- Aisle grouping ---------------------------------------------------------
 
-function escapeRegExp(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+const QUALIFIER_INDEX = buildKeywordIndex(
+  Object.entries(AISLE_QUALIFIERS).map(([keyword, aisle]) => ({ keyword, aisle }))
+);
 
-// Matches a whole word, with an optional plural ending, so "egg" matches
-// "eggs" and "tomato" matches "tomatoes" — but "ham" doesn't match "shame".
-function wordPattern(word) {
-  return new RegExp(`\\b${escapeRegExp(word)}(s|es)?\\b`);
-}
-
-const QUALIFIER_INDEX = Object.entries(AISLE_QUALIFIERS).map(([word, aisle]) => ({
-  aisle,
-  pattern: wordPattern(word),
-}));
-
-// Every keyword from every aisle, flattened into one list and sorted longest
-// first. Built once when the module loads, not on every guessAisle() call.
-// Because it's longest-first, the first match found is the most specific one.
-const KEYWORD_INDEX = Object.entries(AISLE_KEYWORDS)
-  .flatMap(([aisle, keywords]) => keywords.map((keyword) => ({ aisle, keyword, pattern: wordPattern(keyword) })))
-  .sort((a, b) => b.keyword.length - a.keyword.length);
+// Every keyword from every aisle, flattened into one list, longest first.
+// Built once when the module loads, not on every guessAisle() call.
+const KEYWORD_INDEX = buildKeywordIndex(
+  Object.entries(AISLE_KEYWORDS).flatMap(([aisle, keywords]) => keywords.map((keyword) => ({ aisle, keyword })))
+);
 
 // Best-guess aisle for an ingredient name, from the keyword lists in
 // constants.js. Returns DEFAULT_AISLE ('Other') when nothing matches — it's a
 // starting point for the user to correct, not something that has to be right.
 export function guessAisle(rawName) {
-  const name = (rawName || '').toLowerCase();
-
-  const qualifier = QUALIFIER_INDEX.find((q) => q.pattern.test(name));
+  const qualifier = findKeyword(QUALIFIER_INDEX, rawName);
   if (qualifier) return qualifier.aisle;
 
-  const hit = KEYWORD_INDEX.find((k) => k.pattern.test(name));
+  const hit = findKeyword(KEYWORD_INDEX, rawName);
   return hit ? hit.aisle : DEFAULT_AISLE;
 }
 

@@ -21,7 +21,16 @@ export default function Onboarding({ userId, onComplete }) {
     );
   };
 
-  const handleNext = () => setStep((s) => s + 1);
+  const handleNext = () => {
+    // Day 10: budget and household size drive every cost in the app, so
+    // step 1 can't be skipped with them blank any more.
+    if (step === 1 && (!(parseFloat(budget) > 0) || !(parseInt(householdSize, 10) > 0))) {
+      setError('Enter a weekly budget and a household size above 0.');
+      return;
+    }
+    setError('');
+    setStep((s) => s + 1);
+  };
   const handleBack = () => setStep((s) => s - 1);
 
   const handleComplete = async () => {
@@ -50,15 +59,16 @@ export default function Onboarding({ userId, onComplete }) {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto' }}>
+    <div className="page page-narrow">
       <p style={{ color: '#666', marginBottom: '20px' }}>Step {step} of 4</p>
 
       {step === 1 && (
         <div>
           <h2>Budget & Household</h2>
           <div style={{ marginBottom: '15px' }}>
-            <label>Weekly Budget (£)</label>
+            <label htmlFor="onboarding-budget">Weekly Budget (£)</label>
             <input
+              id="onboarding-budget"
               type="number"
               value={budget}
               onChange={(e) => setBudget(e.target.value)}
@@ -66,15 +76,17 @@ export default function Onboarding({ userId, onComplete }) {
             />
           </div>
           <div style={{ marginBottom: '15px' }}>
-            <label>Household Size</label>
+            <label htmlFor="onboarding-household">Household Size</label>
             <input
+              id="onboarding-household"
               type="number"
               value={householdSize}
               onChange={(e) => setHouseholdSize(e.target.value)}
               style={{ width: '100%', padding: '8px', marginTop: '5px' }}
             />
           </div>
-          <button onClick={handleNext} style={{ width: '100%', padding: '10px' }}>
+          {error && <p style={{ color: 'red' }}>{error}</p>}
+          <button className="btn-primary" onClick={handleNext} style={{ width: '100%', padding: '10px' }}>
             Next
           </button>
         </div>
@@ -111,8 +123,9 @@ export default function Onboarding({ userId, onComplete }) {
         <div>
           <h2>Nutrition Goals</h2>
           <div style={{ marginBottom: '15px' }}>
-            <label>Daily Calorie Goal</label>
+            <label htmlFor="onboarding-calories">Daily Calorie Goal</label>
             <input
+              id="onboarding-calories"
               type="number"
               value={calorieGoal}
               onChange={(e) => setCalorieGoal(e.target.value)}
@@ -120,8 +133,9 @@ export default function Onboarding({ userId, onComplete }) {
             />
           </div>
           <div style={{ marginBottom: '15px' }}>
-            <label>Daily Protein Goal (g)</label>
+            <label htmlFor="onboarding-protein">Daily Protein Goal (g)</label>
             <input
+              id="onboarding-protein"
               type="number"
               value={proteinGoal}
               onChange={(e) => setProteinGoal(e.target.value)}

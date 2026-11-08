@@ -1,4 +1,4 @@
-import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam } from './dateutils.js';
+import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, parseISODate } from './dateutils.js';
 
 describe('getMonday', () => {
   test('returns the same date when given a Monday', () => {
@@ -88,5 +88,14 @@ describe('weekStartFromParam', () => {
   test('parses a valid ISO date and rolls it back to that week\'s Monday', () => {
     // 2026-08-20 is a Thursday in the week starting 2026-08-17
     expect(toISODate(weekStartFromParam('2026-08-20'))).toBe('2026-08-17');
+  });
+});
+describe('parseISODate', () => {
+  test('parses as a local date, not UTC midnight', () => {
+    const d = parseISODate('2026-11-09');
+    expect(d.getFullYear()).toBe(2026);
+    expect(d.getMonth()).toBe(10);
+    expect(d.getDate()).toBe(9);
+    expect(d.getHours()).toBe(0);
   });
 });

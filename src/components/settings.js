@@ -35,6 +35,12 @@ export default function Settings({ userId, profile, onSave }) {
 
   const handleSave = async () => {
     setError('');
+    // Day 10: the budget and household size now drive every cost on the site,
+    // so don't let them be saved blank or nonsensical.
+    if (!(parseFloat(budget) > 0) || !(parseInt(householdSize, 10) > 0)) {
+      setError('Enter a weekly budget and a household size above 0.');
+      return;
+    }
     setSuccess(false);
     setLoading(true);
 
@@ -62,12 +68,13 @@ export default function Settings({ userId, profile, onSave }) {
   };
 
   return (
-    <div style={{ maxWidth: '400px', margin: '50px auto' }}>
+    <div className="page page-narrow">
       <h2>Settings</h2>
 
       <div style={{ marginBottom: '15px' }}>
-        <label>Weekly Budget (£)</label>
+        <label htmlFor="settings-budget">Weekly Budget (£)</label>
         <input
+          id="settings-budget"
           type="number"
           value={budget}
           onChange={(e) => setBudget(e.target.value)}
@@ -76,8 +83,9 @@ export default function Settings({ userId, profile, onSave }) {
       </div>
 
       <div style={{ marginBottom: '15px' }}>
-        <label>Household Size</label>
+        <label htmlFor="settings-household">Household Size</label>
         <input
+          id="settings-household"
           type="number"
           value={householdSize}
           onChange={(e) => setHouseholdSize(e.target.value)}
@@ -101,8 +109,9 @@ export default function Settings({ userId, profile, onSave }) {
       </div>
 
       <div style={{ marginBottom: '15px' }}>
-        <label>Daily Calorie Goal</label>
+        <label htmlFor="settings-calories">Daily Calorie Goal</label>
         <input
+          id="settings-calories"
           type="number"
           value={calorieGoal}
           onChange={(e) => setCalorieGoal(e.target.value)}
@@ -111,8 +120,9 @@ export default function Settings({ userId, profile, onSave }) {
       </div>
 
       <div style={{ marginBottom: '15px' }}>
-        <label>Daily Protein Goal (g)</label>
+        <label htmlFor="settings-protein">Daily Protein Goal (g)</label>
         <input
+          id="settings-protein"
           type="number"
           value={proteinGoal}
           onChange={(e) => setProteinGoal(e.target.value)}
@@ -121,8 +131,9 @@ export default function Settings({ userId, profile, onSave }) {
       </div>
 
       <div style={{ marginBottom: '20px' }}>
-        <label>Preferred Supermarket</label>
+        <label htmlFor="settings-supermarket">Preferred Supermarket</label>
         <select
+          id="settings-supermarket"
           value={supermarket}
           onChange={(e) => setSupermarket(e.target.value)}
           style={{ width: '100%', padding: '8px', marginTop: '5px' }}
@@ -140,9 +151,9 @@ export default function Settings({ userId, profile, onSave }) {
 
       <div style={{ display: 'flex', gap: '10px' }}>
         <button onClick={() => navigate('/')} style={{ flex: 1, padding: '10px' }}>
-          Back
+          Cancel
         </button>
-        <button onClick={handleSave} disabled={loading} style={{ flex: 1, padding: '10px' }}>
+        <button className="btn-primary" onClick={handleSave} disabled={loading} style={{ flex: 1, padding: '10px' }}>
           {loading ? 'Saving...' : 'Save Changes'}
         </button>
       </div>

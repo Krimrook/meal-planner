@@ -69,3 +69,10 @@ export function writeStoredWeek(key, isoDate) {
     // best-effort only
   }
 }
+// Parses 'YYYY-MM-DD' as a *local* date. `new Date('2026-11-09')` is parsed
+// as midnight UTC, which is still the 8th in any timezone behind UTC — fine
+// in the UK, but this way the day label is right everywhere.
+export function parseISODate(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(y, m - 1, d);
+}

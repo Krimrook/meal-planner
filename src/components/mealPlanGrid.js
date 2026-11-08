@@ -1,15 +1,28 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, readStoredWeek, writeStoredWeek } from '../utils/dateutils.js';
+import { getMonday, addDays, toISODate, formatDayLabel, formatRangeLabel, weekStartFromParam, readStoredWeek, writeStoredWeek, parseISODate } from '../utils/dateutils.js';
 import { COMMON_MEAL_NOTES } from '../utils/constants';
+import { usePriceTable } from '../hooks/usePriceTable.js';
+import { weekShopEstimate, mealCost } from '../utils/budgetUtils.js';
+import { formatMoney } from '../utils/priceUtils.js';
+import { generatePlan } from '../utils/planGenerator.js';
+import { readStoredFlag, SCALE_PREF_KEY } from '../utils/storage.js';
 
 const MEAL_SLOTS = ['breakfast', 'lunch', 'dinner'];
 const SLOT_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
 const WEEK_STORAGE_KEY = 'mealPlanWeek';
 
-export default function MealPlanGrid({ userId }) {
-  const navigate = useNavigate();
+export default function MealPlanGrid({ userId, profile }) {
+  const { table: priceTable } = usePriceTable(userId);
+  const householdSize = Number(profile?.household_size) || null;
+  const budget = Number(profile?.budget) || 0;
+  const dietaryPreferences = profile?.dietary_preferences ?? [];
+  // Day 10: "Generate week" state
+  const [genSlots, setGenSlots] = useState(['dinner']);
+  const [genRespectDiet, setGenRespectDiet] = useState(true);
+  const [genFromToday, setGenFromToday] = useState(true);
+  const [generated, setGenerated] = useState(null); // result of generatePlan(), shown as a preview
   const [searchParams, setSearchParams] = useSearchParams();
   const [weekStart, setWeekStartState] = useState(() =>
   weekStartFromParam(searchParams.get('week') || readStoredWeek(WEEK_STORAGE_KEY))
@@ -18,7 +31,7 @@ export default function MealPlanGrid({ userId }) {
   const [entries, setEntries] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState('grid'); // 'grid' | 'edit'
+  const [view, setView] = useState('grid'); // 'grid' | 'edit' | 'generate'
   const [editingCell, setEditingCell] = useState(null); // { dateISO, slot }
   const [editMode, setEditMode] = useState('recipe'); // 'recipe' | 'custom'
   const [editRecipeId, setEditRecipeId] = useState('');
@@ -73,7 +86,7 @@ useEffect(() => {
     setLoading(true);
     return supabase
       .from('meal_plan_entries')
-      .select('*, recipe:recipes(id, name)')
+      .select('*, recipe:recipes(id, name, servings, ingredients_structured)')
       .eq('user_id', userId)
       .gte('plan_date', toISODate(weekStart))
       .lte('plan_date', toISODate(weekEnd))
@@ -97,9 +110,12 @@ useEffect(() => {
   }, [fetchEntries]);
 
   useEffect(() => {
+    // select('*') rather than a column list: if the Day 10 migration
+    // (meal_types) hasn't been run yet, a named column would fail the whole
+    // query and empty the recipe dropdown.
     supabase
       .from('recipes')
-      .select('id, name')
+      .select('*')
       .eq('user_id', userId)
       .order('name')
       .then(({ data, error }) => {
@@ -267,6 +283,169 @@ useEffect(() => {
     fetchEntries();
   };
 
+  // --- Day 10: budget estimate + Generate week ------------------------------
+
+  const entryList = Object.values(entries);
+  const scale = readStoredFlag(SCALE_PREF_KEY, true);
+  const estimate = weekShopEstimate(entryList, priceTable, { householdSize, scale });
+  const isCurrentWeek = todayISO >= toISODate(weekStart) && todayISO <= toISODate(weekEnd);
+
+  const toggleGenSlot = (slot) => {
+    setGenSlots((prev) => (prev.includes(slot) ? prev.filter((s) => s !== slot) : MEAL_SLOTS.filter((s) => s === slot || prev.includes(s))));
+  };
+
+  const runGenerate = () => {
+    const emptySlots = flatSlots.filter(
+      (s) => genSlots.includes(s.slot) && !entries[`${s.dateISO}_${s.slot}`] && (!isCurrentWeek || !genFromToday || s.dateISO >= todayISO)
+    );
+    const planned = entryList.filter((e) => e.recipe);
+    setGenerated(
+      generatePlan({
+        recipes,
+        slots: emptySlots,
+        budget,
+        alreadySpent: planned.reduce((sum, e) => sum + mealCost(e.recipe, priceTable, householdSize), 0),
+        existingRecipeIds: planned.map((e) => e.recipe_id),
+        householdSize,
+        priceTable,
+        dietaryPreferences,
+        respectDiet: genRespectDiet,
+      })
+    );
+  };
+
+  const saveGenerated = async () => {
+    if (!generated?.proposals.length) return;
+    setSaving(true);
+    setError('');
+    const { error } = await supabase.from('meal_plan_entries').upsert(
+      generated.proposals.map((p) => ({
+        user_id: userId,
+        plan_date: p.dateISO,
+        meal_slot: p.slot,
+        recipe_id: p.recipe.id,
+        custom_meal_name: null,
+      })),
+      { onConflict: 'user_id,plan_date,meal_slot' }
+    );
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setGenerated(null);
+    setView('grid');
+    fetchEntries();
+  };
+
+  if (view === 'generate') {
+    const afterEstimate = generated
+      ? weekShopEstimate(
+          [...entryList, ...generated.proposals.map((p) => ({ recipe: p.recipe }))],
+          priceTable,
+          { householdSize, scale }
+        )
+      : null;
+    return (
+      <div className="page">
+        <div className="page-header">
+          <h2>Generate week</h2>
+          <span className="muted">{formatRangeLabel(weekStart, weekEnd)}</span>
+        </div>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Fills <strong>empty</strong> slots from your recipe library, aiming to keep the week within your{' '}
+          {budget > 0 ? `${formatMoney(budget)} budget` : 'budget (none set — add one in Settings)'}, with no recipe more than twice.
+          Nothing is saved until you press Save.
+        </p>
+
+        <div className="card">
+          <div className="checkbox-row" style={{ marginBottom: '8px' }}>
+            <strong style={{ marginRight: '12px' }}>Fill:</strong>
+            {MEAL_SLOTS.map((slot) => (
+              <label key={slot}>
+                <input type="checkbox" checked={genSlots.includes(slot)} onChange={() => toggleGenSlot(slot)} style={{ marginRight: '6px' }} />
+                {SLOT_LABELS[slot]}
+              </label>
+            ))}
+          </div>
+          {dietaryPreferences.length > 0 && (
+            <label className="small" style={{ display: 'block', marginBottom: '6px' }}>
+              <input type="checkbox" checked={genRespectDiet} onChange={(e) => setGenRespectDiet(e.target.checked)} style={{ marginRight: '6px' }} />
+              Only recipes tagged {dietaryPreferences.join(' + ')}
+            </label>
+          )}
+          {isCurrentWeek && (
+            <label className="small" style={{ display: 'block', marginBottom: '6px' }}>
+              <input type="checkbox" checked={genFromToday} onChange={(e) => setGenFromToday(e.target.checked)} style={{ marginRight: '6px' }} />
+              Skip days that have already passed
+            </label>
+          )}
+          <button className="btn btn-primary" onClick={runGenerate} disabled={genSlots.length === 0 || recipes.length === 0} style={{ marginTop: '6px' }}>
+            {generated ? 'Regenerate' : 'Generate'}
+          </button>
+          {recipes.length === 0 && <p className="muted small">Add some recipes first.</p>}
+        </div>
+
+        {generated && (
+          <div className="card">
+            {generated.warnings.map((w) => (
+              <p key={w} className="small" style={{ color: 'var(--amber)', marginTop: 0 }}>
+                {w}
+              </p>
+            ))}
+            {generated.proposals.length === 0 && generated.skipped.length === 0 && (
+              <p className="muted">No empty slots to fill for the options above.</p>
+            )}
+            {generated.proposals.map((p) => (
+              <div key={`${p.dateISO}_${p.slot}`} className="list-row">
+                <span style={{ width: '150px' }} className="muted small">
+                  {formatDayLabel(parseISODate(p.dateISO))} · {SLOT_LABELS[p.slot]}
+                </span>
+                <span className="grow">{p.recipe.name}</span>
+                <span className="money small muted">≈ {formatMoney(p.cost)}</span>
+              </div>
+            ))}
+            {generated.skipped.map((s) => (
+              <div key={`${s.dateISO}_${s.slot}`} className="list-row">
+                <span style={{ width: '150px' }} className="muted small">
+                  {formatDayLabel(parseISODate(s.dateISO))} · {SLOT_LABELS[s.slot]}
+                </span>
+                <span className="grow muted small">Left empty — {s.reason}</span>
+              </div>
+            ))}
+            {afterEstimate && generated.proposals.length > 0 && (
+              <p className="small" style={{ marginBottom: 0 }}>
+                Week's shop with these added: <strong className="money">{formatMoney(afterEstimate.total)}</strong>
+                {budget > 0 && ` of ${formatMoney(budget)}`}
+                <span className="muted">
+                  {' '}
+                  (whole packs — usually a bit more than the per-meal figures, since leftovers from a pack aren't counted)
+                </span>
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && <p className="error">{error}</p>}
+
+        <div className="row">
+          <button
+            className="btn"
+            onClick={() => {
+              setGenerated(null);
+              setView('grid');
+            }}
+          >
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={saveGenerated} disabled={saving || !generated?.proposals.length}>
+            {saving ? 'Saving...' : `Save ${generated?.proposals.length || ''} meals to plan`}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (view === 'edit' && editingCell) {
     // Waiting on the adjacent week's entries to load before we can show the
     // target slot pre-filled with its saved data (if any).
@@ -278,7 +457,7 @@ useEffect(() => {
       );
     }
 
-    const dayLabel = formatDayLabel(new Date(editingCell.dateISO));
+    const dayLabel = formatDayLabel(parseISODate(editingCell.dateISO));
     const isFirstSlot = currentIndex === 0;
     const isLastSlot = currentIndex === flatSlots.length - 1;
 
@@ -408,8 +587,16 @@ useEffect(() => {
     <div style={{ maxWidth: '800px', margin: '50px auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h2 style={{ margin: 0 }}>Weekly Meal Plan</h2>
-        <button onClick={() => navigate('/')} style={{ padding: '8px 16px', cursor: 'pointer' }}>
-          Back
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setGenerated(null);
+            setError('');
+            setView('generate');
+          }}
+          disabled={loading}
+        >
+          Generate week
         </button>
       </div>
 
@@ -432,12 +619,23 @@ useEffect(() => {
         </button>
       </div>
 
+      {!loading && (
+        <p className="small muted" style={{ marginTop: '-8px', marginBottom: '16px' }}>
+          Estimated shop: <strong className="money" style={{ color: budget > 0 && estimate.total > budget ? 'var(--red)' : 'var(--ink)' }}>
+            {formatMoney(estimate.total)}
+          </strong>
+          {budget > 0 && ` of ${formatMoney(budget)} budget`}
+          {estimate.unpriced > 0 && ` · ${estimate.unpriced} item${estimate.unpriced === 1 ? '' : 's'} unpriced`}
+        </p>
+      )}
+
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {loading ? (
         <p>Loading meal plan...</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="table-scroll">
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '8px', minWidth: '520px' }}>
           <thead>
             <tr>
               <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Day</th>
@@ -482,6 +680,7 @@ useEffect(() => {
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

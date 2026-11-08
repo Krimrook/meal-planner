@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { DIETARY_OPTIONS, COMMON_UNITS } from '../utils/constants';
+import { usePriceTable } from '../hooks/usePriceTable.js';
+import { recipeCost, scaleFactor } from '../utils/budgetUtils.js';
+import { formatMoney } from '../utils/priceUtils.js';
+
+const MEAL_TYPES = [
+  { id: 'breakfast', label: 'Breakfast' },
+  { id: 'lunch', label: 'Lunch' },
+  { id: 'dinner', label: 'Dinner' },
+];
 
 const emptyIngredientRow = () => ({ name: '', quantity: '', unit: '' });
 
@@ -12,6 +20,7 @@ const emptyForm = {
   ingredients: [emptyIngredientRow()],
   instructions: '',
   dietaryTags: [],
+  mealTypes: [],
 };
 
 function formatIngredient(ing) {
@@ -22,8 +31,11 @@ function formatIngredient(ing) {
   return parts.join(' ');
 }
 
-export default function RecipeLibrary({ userId }) {
-  const navigate = useNavigate();
+export default function RecipeLibrary({ userId, profile }) {
+  const { table: priceTable } = usePriceTable(userId);
+  const [search, setSearch] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'name' | 'cost'
   const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -58,6 +70,13 @@ export default function RecipeLibrary({ userId }) {
       dietaryTags: prev.dietaryTags.includes(tag)
         ? prev.dietaryTags.filter((t) => t !== tag)
         : [...prev.dietaryTags, tag],
+    }));
+  };
+
+  const toggleMealType = (type) => {
+    setForm((prev) => ({
+      ...prev,
+      mealTypes: prev.mealTypes.includes(type) ? prev.mealTypes.filter((t) => t !== type) : [...prev.mealTypes, type],
     }));
   };
 
@@ -101,6 +120,7 @@ export default function RecipeLibrary({ userId }) {
       ingredients: ingredientRows,
       instructions: recipe.instructions ?? '',
       dietaryTags: recipe.dietary_tags ?? [],
+      mealTypes: recipe.meal_types ?? [],
     });
     setEditingId(recipe.id);
     setError('');
@@ -131,6 +151,7 @@ export default function RecipeLibrary({ userId }) {
       ingredients_structured: cleanedIngredients,
       instructions: form.instructions.trim(),
       dietary_tags: form.dietaryTags,
+      meal_types: form.mealTypes,
     };
 
     const { error } = editingId
@@ -177,7 +198,7 @@ export default function RecipeLibrary({ userId }) {
   
   if (view === 'form') {
     return (
-      <div style={{ maxWidth: '500px', margin: '50px auto' }}>
+      <div className="page page-narrow">
         <h2>{editingId ? 'Edit Recipe' : 'Add Recipe'}</h2>
 
         <div style={{ marginBottom: '15px' }}>
@@ -237,6 +258,7 @@ export default function RecipeLibrary({ userId }) {
               />
               <input
                 type="text"
+                list="ingredient-suggestions"
                 placeholder="Ingredient name"
                 value={row.name}
                 onChange={(e) => updateIngredientRow(i, 'name', e.target.value)}
@@ -266,15 +288,17 @@ export default function RecipeLibrary({ userId }) {
             onClick={addIngredientRow}
             style={{ marginTop: '10px', padding: '6px 12px', cursor: 'pointer' }}
           >
-             {/* Same pattern as unit-suggestions: suggestions only, the field stays
-              free text. Built from the user's own saved recipes. */}
+            + Add Ingredient
+          </button>
+          {/* Same pattern as unit-suggestions: suggestions only, the field stays
+              free text. Built from the user's own saved recipes. (Day 10 fix:
+              this used to sit *inside* the button above, and the name inputs
+              were missing list="ingredient-suggestions", so it never showed.) */}
           <datalist id="ingredient-suggestions">
             {knownIngredientNames.map((name) => (
               <option key={name} value={name} />
             ))}
           </datalist>
-            + Add Ingredient
-          </button>
         </div>
 
         <div style={{ marginBottom: '15px' }}>
@@ -285,6 +309,26 @@ export default function RecipeLibrary({ userId }) {
             rows={6}
             style={{ width: '100%', padding: '8px', marginTop: '5px', fontFamily: 'inherit' }}
           />
+        </div>
+
+        <div style={{ marginBottom: '15px' }}>
+          <label>Good for</label>
+          <p style={{ fontSize: '12px', color: '#666', margin: '4px 0' }}>
+            Used by "Generate week" on the Meal Plan. Leave all unticked if it suits any meal.
+          </p>
+          <div className="checkbox-row">
+            {MEAL_TYPES.map((type) => (
+              <label key={type.id}>
+                <input
+                  type="checkbox"
+                  checked={form.mealTypes.includes(type.id)}
+                  onChange={() => toggleMealType(type.id)}
+                  style={{ marginRight: '6px' }}
+                />
+                {type.label}
+              </label>
+            ))}
+          </div>
         </div>
 
         <div style={{ marginBottom: '20px' }}>
@@ -316,44 +360,76 @@ export default function RecipeLibrary({ userId }) {
     );
   }
 
+  const householdSize = Number(profile?.household_size) || null;
+
+  const costed = recipes.map((recipe) => ({ recipe, cost: recipeCost(recipe, priceTable) }));
+  const needle = search.trim().toLowerCase();
+  const visible = costed
+    .filter(({ recipe }) => !needle || recipe.name.toLowerCase().includes(needle))
+    .filter(({ recipe }) => !tagFilter || (recipe.dietary_tags ?? []).includes(tagFilter))
+    .sort((a, b) => {
+      if (sortBy === 'name') return a.recipe.name.localeCompare(b.recipe.name);
+      if (sortBy === 'cost') return (a.cost.perServing ?? Infinity) - (b.cost.perServing ?? Infinity);
+      return 0; // 'newest' — already in created_at order from the query
+    });
+
   return (
-    <div style={{ maxWidth: '600px', margin: '50px auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ margin: 0 }}>My Recipes</h2>
-        <button onClick={startAdd} style={{ padding: '8px 16px', cursor: 'pointer' }}>
+    <div className="page">
+      <div className="page-header">
+        <h2>My Recipes</h2>
+        <button className="btn btn-primary" onClick={startAdd}>
           + Add Recipe
         </button>
       </div>
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <p className="error">{error}</p>}
+
+      {recipes.length > 0 && (
+        <div className="row" style={{ marginBottom: '12px' }}>
+          <input
+            type="search"
+            placeholder="Search recipes"
+            aria-label="Search recipes"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="grow"
+            style={{ padding: '8px', minWidth: '160px' }}
+          />
+          <select aria-label="Filter by tag" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={{ padding: '8px' }}>
+            <option value="">All tags</option>
+            {DIETARY_OPTIONS.map((tag) => (
+              <option key={tag} value={tag}>
+                {tag}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Sort recipes" value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={{ padding: '8px' }}>
+            <option value="newest">Newest</option>
+            <option value="name">A–Z</option>
+            <option value="cost">Cheapest per serving</option>
+          </select>
+        </div>
+      )}
 
       {loading ? (
         <p>Loading recipes...</p>
       ) : recipes.length === 0 ? (
-        <p style={{ color: '#666' }}>No recipes yet. Add your first one above.</p>
+        <p className="muted">No recipes yet. Add your first one above.</p>
+      ) : visible.length === 0 ? (
+        <p className="muted">No recipes match.</p>
       ) : (
-        recipes.map((recipe) => (
-          <div
-            key={recipe.id}
-            style={{
-              border: '1px solid #ddd',
-              borderRadius: '8px',
-              padding: '15px',
-              marginBottom: '12px',
-              textAlign: 'left',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <h3 style={{ margin: '0 0 8px 0' }}>{recipe.name}</h3>
+        visible.map(({ recipe, cost }) => (
+          <div key={recipe.id} className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+              <h3 style={{ margin: '0 0 6px 0' }}>{recipe.name}</h3>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => startEdit(recipe)} style={{ padding: '4px 10px', cursor: 'pointer' }}>
+                <button onClick={() => startEdit(recipe)} style={{ padding: '4px 10px' }}>
                   Edit
                 </button>
                 <button
                   onClick={() => handleDelete(recipe.id)}
                   style={{
                     padding: '4px 10px',
-                    cursor: 'pointer',
                     color: confirmDeleteId === recipe.id ? 'white' : 'inherit',
                     background: confirmDeleteId === recipe.id ? '#c0392b' : undefined,
                   }}
@@ -363,26 +439,33 @@ export default function RecipeLibrary({ userId }) {
               </div>
             </div>
 
-            <p style={{ color: '#666', margin: '0 0 8px 0', fontSize: '14px' }}>
-              {recipe.servings ? `${recipe.servings} servings` : ''}
-              {recipe.servings && recipe.prep_time_minutes ? ' · ' : ''}
-              {recipe.prep_time_minutes ? `${recipe.prep_time_minutes} min prep` : ''}
+            <p className="muted small" style={{ margin: '0 0 8px 0' }}>
+              {[
+                recipe.servings ? `${recipe.servings} serving${recipe.servings === 1 ? '' : 's'}` : null,
+                recipe.prep_time_minutes ? `${recipe.prep_time_minutes} min prep` : null,
+                cost.perServing !== null && cost.total > 0 ? `≈ ${formatMoney(cost.perServing)} per serving` : null,
+                cost.total > 0 && householdSize && recipe.servings
+                  ? `${formatMoney(cost.total * scaleFactor(recipe.servings, householdSize))} for ${householdSize}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              {cost.missing.length > 0 && (
+                <span className="pill pill-amber" style={{ marginLeft: '6px' }} title={cost.missing.join(', ')}>
+                  {cost.missing.length} unpriced
+                </span>
+              )}
             </p>
 
-            {recipe.dietary_tags?.length > 0 && (
+            {(recipe.dietary_tags?.length > 0 || recipe.meal_types?.length > 0) && (
               <p style={{ margin: '0 0 8px 0' }}>
-                {recipe.dietary_tags.map((tag) => (
-                  <span
-                    key={tag}
-                    style={{
-                      display: 'inline-block',
-                      background: '#eef',
-                      borderRadius: '4px',
-                      padding: '2px 8px',
-                      marginRight: '6px',
-                      fontSize: '12px',
-                    }}
-                  >
+                {(recipe.meal_types ?? []).map((type) => (
+                  <span key={type} className="pill pill-green">
+                    {MEAL_TYPES.find((t) => t.id === type)?.label ?? type}
+                  </span>
+                ))}
+                {(recipe.dietary_tags ?? []).map((tag) => (
+                  <span key={tag} className="pill">
                     {tag}
                   </span>
                 ))}
@@ -409,10 +492,6 @@ export default function RecipeLibrary({ userId }) {
           </div>
         ))
       )}
-
-      <button onClick={() => navigate('/')} style={{ padding: '10px 20px', cursor: 'pointer', marginTop: '10px' }}>
-        Back
-      </button>
     </div>
   );
 }

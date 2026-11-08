@@ -19,6 +19,7 @@ import ForgotPassword from './components/forgotPassword';
 import UpdatePassword from './components/updatePassword';
 import Welcome from './components/welcome';
 import NavBar from './components/navbar.js';
+import Prices from './components/prices.js';
 import { supabase } from './lib/supabase';
 import './app.css';
 
@@ -39,12 +40,12 @@ export function PublicOnly({ user }) {
 // conditional returns. Day 6: also renders the persistent NavBar above the
 // Outlet, since every route in this group is a "logged in with a profile"
 // screen — the one place that's true for all of them.
-export function RequireProfile({ user, profile }) {
+export function RequireProfile({ user, profile, onLogout }) {
   if (!user) return <Navigate to="/signup" replace />;
   if (!profile) return <Navigate to="/onboarding" replace />;
   return (
     <>
-      <NavBar />
+      <NavBar onLogout={onLogout} />
       <Outlet />
     </>
   );
@@ -151,12 +152,13 @@ export function AppShell() {
           }
         />
 
-        <Route element={<RequireProfile user={user} profile={profile} />}>
-          <Route path="/" element={<Welcome user={user} profile={profile} onLogout={handleLogout} />} />
+        <Route element={<RequireProfile user={user} profile={profile} onLogout={handleLogout} />}>
+          <Route path="/" element={<Welcome user={user} profile={profile} />} />
           <Route path="/settings" element={<Settings userId={user?.id} profile={profile} onSave={fetchProfile} />} />
-          <Route path="/recipes" element={<RecipeLibrary userId={user?.id} />} />
-          <Route path="/meal-plan" element={<MealPlanGrid userId={user?.id} />} />
-          <Route path="/shopping-list" element={<ShoppingList userId={user?.id} />} />
+          <Route path="/recipes" element={<RecipeLibrary userId={user?.id} profile={profile} />} />
+          <Route path="/meal-plan" element={<MealPlanGrid userId={user?.id} profile={profile} />} />
+          <Route path="/shopping-list" element={<ShoppingList userId={user?.id} profile={profile} />} />
+          <Route path="/prices" element={<Prices userId={user?.id} />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -167,7 +169,7 @@ export function AppShell() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AppShell />
     </BrowserRouter>
   );
